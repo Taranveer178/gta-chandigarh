@@ -1,0 +1,3675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>GTA Chandigarh — 3D Open-World Action & Driving Game</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #090d16;
+      font-family: 'Inter', sans-serif;
+    }
+    #game-viewport canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #0f172a; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+  </style>
+</head>
+<body class="text-slate-100 relative w-screen h-screen overflow-hidden">
+
+  <!-- 3D WebGL Viewport -->
+  <div id="game-viewport" class="absolute inset-0 z-0"></div>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="fixed top-16 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2 pointer-events-none max-w-md w-full px-3"></div>
+
+  <!-- Top Navigation & Status Bar -->
+  <header class="fixed top-0 inset-x-0 z-20 flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-gradient-to-b from-slate-950/90 via-slate-950/60 to-transparent pointer-events-auto">
+    <div class="flex items-center gap-2.5">
+      <span class="px-2.5 py-1 rounded-md bg-amber-500 text-slate-950 font-black text-xs tracking-wider uppercase shadow">GTA CHANDIGARH</span>
+      <span id="hud-location" class="text-xs font-semibold text-slate-200 bg-slate-900/80 px-2.5 py-1 rounded-md border border-slate-700/70">⛲ Sector 17 Plaza (City Heart)</span>
+      <div class="hidden sm:flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded-md border border-slate-700/70">
+        <span id="hud-signal-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+        <span id="hud-signal-text" class="text-[11px] font-medium text-slate-300">Signal: GREEN</span>
+      </div>
+    </div>
+
+    <!-- Action Toolbar -->
+    <div class="flex flex-wrap items-center gap-1.5">
+      <button id="btn-hud-missions" class="px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-amber-500/40 text-amber-300 text-xs font-bold transition">🎯 Missions (Tab)</button>
+      <button id="btn-hud-garage" class="px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-sky-500/40 text-sky-300 text-xs font-bold transition">🚗 Garage (G)</button>
+      <button id="btn-hud-taxi" class="px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition">🚕 Taxi Job</button>
+      <button id="btn-hud-map" class="px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-slate-600 text-slate-200 text-xs font-semibold transition">🗺️ Map (M)</button>
+      <button id="btn-hud-cheats" class="px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-purple-500/40 text-purple-300 text-xs font-bold transition">⚡ Cheats (`)</button>
+      <button id="btn-hud-weather" class="px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-slate-600 text-slate-200 text-xs font-semibold transition">🌤️ Weather</button>
+      <button id="btn-hud-mute" class="px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-slate-600 text-slate-200 text-xs font-semibold transition">🔊 Audio On</button>
+      <button id="btn-hud-engine-guide" class="hidden md:inline-block px-2.5 py-1 rounded-md bg-slate-900/85 hover:bg-slate-800 border border-slate-600 text-slate-300 text-xs font-semibold transition">🛠️ UE5/Unity Path</button>
+    </div>
+  </header>
+
+  <!-- Left HUD: Rotating Minimap & Active Mission Objective Panel -->
+  <aside class="fixed top-14 left-3 z-20 flex flex-col gap-2.5 w-60 pointer-events-none">
+    <div class="relative w-40 h-40 rounded-full border-4 border-slate-800/95 shadow-2xl overflow-hidden bg-slate-950 pointer-events-auto">
+      <canvas id="minimap-canvas" width="160" height="160" class="w-full h-full"></canvas>
+      <div class="absolute top-1 left-1/2 -translate-x-1/2 px-1.5 py-0.2 bg-slate-950/80 rounded text-[9px] font-bold text-amber-400">N</div>
+    </div>
+
+    <div id="hud-mission-panel" class="p-3 rounded-xl bg-slate-950/85 border border-slate-800 shadow-xl backdrop-blur-sm"></div>
+  </aside>
+
+  <!-- Right HUD: Wanted Level, Wallet, Trophies -->
+  <aside class="fixed top-14 right-3 z-20 flex flex-col items-end gap-2 pointer-events-none">
+    <div class="px-3.5 py-2 rounded-xl bg-slate-950/85 border border-slate-800 shadow-xl text-right">
+      <div id="hud-wanted-stars" class="flex items-center justify-end gap-1 tracking-widest"></div>
+      <div id="hud-wanted-status" class="text-[11px] font-semibold text-slate-300 mt-0.5">Level 0: Normal Patrol</div>
+      <div class="flex items-center justify-end gap-3 mt-1.5 pt-1.5 border-t border-slate-800">
+        <span id="hud-money" class="text-base font-black text-emerald-400">₹6,500</span>
+        <span class="text-xs font-bold text-amber-300">✋ <span id="hud-trophies">0/20</span></span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Right HUD: Speedometer, Vehicle Status & Controls Legend -->
+  <aside class="fixed bottom-3 right-3 z-20 flex flex-col items-end gap-2 pointer-events-none">
+    <div class="p-3.5 rounded-2xl bg-slate-950/88 border border-slate-800 shadow-2xl w-64">
+      <div class="flex items-baseline justify-between">
+        <div>
+          <span id="hud-speed" class="text-3xl font-black text-white font-mono">0</span>
+          <span class="text-xs font-bold text-amber-400 uppercase ml-1">km/h</span>
+        </div>
+        <span id="hud-vehicle-name" class="text-xs font-bold text-sky-400 truncate max-w-[130px]">Marut-800 DX</span>
+      </div>
+
+      <div class="mt-2.5 space-y-1.5 text-[10px] font-semibold">
+        <div class="flex items-center gap-2">
+          <span class="w-12 text-slate-400">ARMOR</span>
+          <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div id="hud-damage-bar" class="h-full bg-emerald-400 transition-all" style="width: 100%"></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-12 text-slate-400">FUEL</span>
+          <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div id="hud-fuel-bar" class="h-full bg-amber-400 transition-all" style="width: 100%"></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="w-12 text-slate-400">NITRO</span>
+          <div class="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div id="hud-nos-bar" class="h-full bg-sky-400 transition-all" style="width: 100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-2.5 pt-2 border-t border-slate-800/80 text-[10px] text-slate-400 flex flex-wrap gap-x-2.5 gap-y-1">
+        <span><b class="text-slate-200">WASD</b> Drive</span>
+        <span><b class="text-slate-200">Space</b> Drift</span>
+        <span><b class="text-slate-200">Shift</b> NOS</span>
+        <span><b class="text-slate-200">E</b> Enter/Exit</span>
+        <span><b class="text-slate-200">C</b> Cam</span>
+        <span><b class="text-slate-200">H</b> Horn</span>
+        <span><b class="text-slate-200">F</b> Lights</span>
+        <span><b class="text-slate-200">R</b> Flip</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Touch / Mobile D-Pad Controls -->
+  <div class="fixed bottom-3 left-3 z-20 flex items-center gap-2 md:hidden pointer-events-auto">
+    <button data-touch-key="KeyA" class="w-11 h-11 rounded-xl bg-slate-900/85 border border-slate-700 text-white font-bold">◀</button>
+    <div class="flex flex-col gap-2">
+      <button data-touch-key="KeyW" class="w-11 h-11 rounded-xl bg-emerald-600/90 border border-emerald-400 text-white font-bold">▲</button>
+      <button data-touch-key="KeyS" class="w-11 h-11 rounded-xl bg-rose-600/90 border border-rose-400 text-white font-bold">▼</button>
+    </div>
+    <button data-touch-key="KeyD" class="w-11 h-11 rounded-xl bg-slate-900/85 border border-slate-700 text-white font-bold">▶</button>
+    <button data-touch-key="Space" class="px-3 h-11 rounded-xl bg-amber-500 text-slate-950 font-black text-xs">DRIFT</button>
+  </div>
+
+  <!-- Main Menu Overlay -->
+  <div id="main-menu-overlay" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="max-w-2xl w-full rounded-3xl bg-slate-900 border border-slate-700/80 shadow-2xl p-6 sm:p-8">
+      <div class="flex items-center justify-between gap-2">
+        <span class="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase tracking-wider">Open-World 3D Sandbox • Chandigarh, India</span>
+        <span class="text-xs font-mono text-slate-400">Three.js WebGL Engine</span>
+      </div>
+      <h1 class="text-3xl sm:text-5xl font-black tracking-tight text-white mt-3">GTA <span class="text-amber-400">CHANDIGARH</span></h1>
+      <p class="text-sm text-slate-300 mt-2 leading-relaxed">
+        Explore Le Corbusier’s iconic City Beautiful across <b>Sector 17 Plaza</b>, <b>Sukhna Lake</b>, <b>Capitol Complex</b>, <b>Rock Garden</b>, <b>Panjab University</b>, <b>Elante Mall</b>, and <b>ISBT 17/43</b>. Drive 9 Indian vehicles, obey or break CCTV traffic rules, survive 5-Star PCR police pursuits, and complete 32 playable missions.
+      </p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-6">
+        <button id="btn-start-play" class="py-3.5 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm tracking-wide shadow-lg transition">
+          ▶ CONTINUE / FREE ROAM
+        </button>
+        <button id="btn-menu-missions" class="py-3.5 px-5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm transition">
+          🎯 SELECT MISSION (32 MISSIONS)
+        </button>
+        <button id="btn-menu-garage" class="py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 font-bold text-sm transition">
+          🚗 GARAGE & CUSTOMIZER (9 VEHICLES)
+        </button>
+        <button id="btn-menu-newgame" class="py-3 px-5 rounded-xl bg-slate-800 hover:bg-rose-950/70 border border-slate-700 text-slate-300 font-semibold text-sm transition">
+          🔄 NEW CAREER RESET
+        </button>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-slate-400">
+        <div><b class="text-white">12 Landmarks:</b> Capitol, Sukhna, Rock Garden, PU, Elante</div>
+        <div><b class="text-white">Traffic AI:</b> Red-light CCTV, Challans, 5-Star Police</div>
+        <div><b class="text-white">Cheat Console:</b> Press <code class="text-amber-300">`</code> for 15 live cheats</div>
+        <div><b class="text-white">Auto-Save:</b> LocalStorage persistence active</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Missions Modal (Tab) -->
+  <div id="modal-missions" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="max-w-4xl w-full max-h-[86vh] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-black text-white">🎯 Chandigarh Mission Dispatch (12 Core + 20 Variations)</h2>
+          <p class="text-xs text-slate-400">Select any story mission, traffic-rule exam, police chase, or side contract to begin immediately.</p>
+        </div>
+        <button data-close-modal class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold">✕ Close (Esc)</button>
+      </div>
+      <div id="missions-list-container" class="p-4 overflow-y-auto custom-scroll grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
+  </div>
+
+  <!-- Garage & Dealership Modal (G) -->
+  <div id="modal-garage" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="max-w-4xl w-full max-h-[86vh] rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-black text-white">🚗 Sector 22 Auto Customs, Dealership & Garage</h2>
+          <p class="text-xs text-slate-400">Unlock Indian vehicles, customize body paint, and tune engine stages.</p>
+        </div>
+        <button data-close-modal class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold">✕ Close (Esc)</button>
+      </div>
+      <div id="garage-list-container" class="p-4 overflow-y-auto custom-scroll grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+    </div>
+  </div>
+
+  <!-- Full Interactive Map Modal (M) -->
+  <div id="modal-map" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="max-w-2xl w-full rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-4 flex flex-col items-center">
+      <div class="w-full flex items-center justify-between mb-3">
+        <div>
+          <h2 class="text-base font-black text-white">🗺️ Chandigarh Master Plan Sector Grid Map</h2>
+          <p class="text-xs text-slate-400">Click anywhere on the map to set a yellow GPS Navigation Waypoint.</p>
+        </div>
+        <button data-close-modal class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold">✕ Close (M)</button>
+      </div>
+      <canvas id="fullmap-canvas" width="520" height="520" class="w-full max-w-[480px] aspect-square rounded-xl border border-slate-700 cursor-crosshair"></canvas>
+    </div>
+  </div>
+
+  <!-- Cheat Console Modal (` Backtick) -->
+  <div id="modal-cheats" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="max-w-xl w-full rounded-2xl bg-slate-900 border border-purple-500/50 shadow-2xl p-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-black text-purple-300">⚡ GTA Chandigarh Developer Cheat Console (`)</h2>
+        <button data-close-modal class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold">✕ Close</button>
+      </div>
+      <p class="text-xs text-slate-400 mt-1">Type a cheat code below or click any quick-activate badge:</p>
+      <div class="flex gap-2 mt-3">
+        <input id="cheat-input" type="text" placeholder="Enter code e.g. FULLHEALTH, SPAWNSUV, NOS..." class="flex-1 px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-sm font-mono text-white uppercase focus:outline-none focus:border-purple-400" />
+        <button id="btn-cheat-submit" class="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs">Execute</button>
+      </div>
+      <div id="cheat-feedback" class="text-xs mt-2 font-medium text-slate-400">Ready for command input...</div>
+
+      <div class="mt-4 pt-3 border-t border-slate-800 flex flex-wrap gap-1.5">
+        <button data-quick-cheat="FULLHEALTH" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">FULLHEALTH</button>
+        <button data-quick-cheat="REPAIRCAR" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">REPAIRCAR</button>
+        <button data-quick-cheat="ADD5000" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">ADD5000</button>
+        <button data-quick-cheat="SPAWNCAR" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">SPAWNCAR</button>
+        <button data-quick-cheat="SPAWNSUV" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">SPAWNSUV</button>
+        <button data-quick-cheat="SPAWNBIKE" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">SPAWNBIKE</button>
+        <button data-quick-cheat="NOS" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">NOS</button>
+        <button data-quick-cheat="CLEARCHASE" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">CLEARCHASE</button>
+        <button data-quick-cheat="WANTEDUP" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">WANTEDUP</button>
+        <button data-quick-cheat="WANTEDDOWN" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">WANTEDDOWN</button>
+        <button data-quick-cheat="SUNNYDAY" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">SUNNYDAY</button>
+        <button data-quick-cheat="RAINMODE" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">RAINMODE</button>
+        <button data-quick-cheat="MIDNIGHT" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">MIDNIGHT</button>
+        <button data-quick-cheat="SUPERJUMP" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">SUPERJUMP</button>
+        <button data-quick-cheat="SLOWMO" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-purple-900/60 text-[11px] font-mono text-purple-200 border border-slate-700">SLOWMO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unreal Engine 5 / Unity Scaling Guide Modal -->
+  <div id="modal-engine-guide" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="max-w-2xl w-full rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl p-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-black text-amber-400">🛠️ Browser WebGL Scope vs. Unreal Engine 5 / Unity Roadmap</h2>
+        <button data-close-modal class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold">✕ Close</button>
+      </div>
+      <div class="mt-3 space-y-2.5 text-xs text-slate-300 leading-relaxed">
+        <p><b class="text-white">What is Genuinely Implemented in this WebGL Build:</b> Complete 1.6×1.6 km Chandigarh sector grid with 25 roundabouts, 12 landmarks, 9 drivable Indian vehicles, AI traffic & signal enforcement, 5-level line-of-sight police pursuit, 32 playable missions, Web Audio synthesizer, LocalStorage save persistence, and 15 working cheat codes.</p>
+        <p><b class="text-white">Browser Sandbox Limitations:</b> Browser memory & single-threaded JS limit high-poly photogrammetry, soft-body cloth/chassis deformation, and 10,000+ crowd ragdolls.</p>
+        <p><b class="text-white">Recommended Unreal Engine 5 Path:</b> Import OpenStreetMap Chandigarh splines into <b>World Partition</b>, use <b>Nanite</b> for Le Corbusier brutalist concrete & Nek Chand Rock Garden mosaics, <b>Lumen</b> for Sukhna Lake reflections, <b>Chaos Vehicles</b> for 4x4 suspension, and <b>MassAI</b> for dense Indian traffic.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+// ============================================================================
+// MODULE 1: CONSTANTS, CHANDIGARH MAP LAYOUT, VEHICLES & MISSIONS DATA
+// ============================================================================
+
+const WORLD_CONFIG = {
+  SIZE: 1600,
+  HALF_SIZE: 800,
+  BLOCK_SIZE: 280,
+  ROAD_WIDTH: 26,
+  SIDEWALK_WIDTH: 4.5,
+  ROUNDABOUT_OUTER: 24,
+  ROUNDABOUT_INNER: 11,
+  SPEED_LIMIT_KMH: 80,
+  COLLECTIBLE_COUNT: 20,
+  ROADS_X: [-560, -280, 0, 280, 560],
+  ROADS_Z: [-560, -280, 0, 280, 560],
+  ROAD_NAMES_Z: {
+    '-560': 'Uttar Marg (Capitol Axis)',
+    '-280': 'Madhya Marg (Central Artery)',
+    '0': 'Udyog Path (Sector 17 Heart)',
+    '280': 'Dakshin Marg (Highway Axis)',
+    '560': 'Purv Marg (Airport & Station Belt)'
+  },
+  ROAD_NAMES_X: {
+    '-560': 'Paschim Marg (University Belt)',
+    '-280': 'Jan Marg (Boulevard Axis)',
+    '0': 'Himalaya Marg (Heritage Spine)',
+    '280': 'Sukhna Path (Lake Boulevard)',
+    '560': 'Industrial Expressway'
+  }
+};
+
+const LANDMARKS = [
+  {
+    id: 'sector17',
+    name: 'Sector 17 Plaza (City Heart)',
+    sector: 'Sector 17',
+    x: -140,
+    z: -140,
+    radius: 95,
+    color: '#f59e0b',
+    icon: '⛲',
+    description: 'Le Corbusier brutalist commercial plaza, musical fountain, Neelam Cinema & shopping arcades.'
+  },
+  {
+    id: 'capitol',
+    name: 'Capitol Complex & Open Hand',
+    sector: 'Sector 1',
+    x: -140,
+    z: -700,
+    radius: 110,
+    color: '#10b981',
+    icon: '✋',
+    description: 'UNESCO World Heritage site featuring the giant rotating Open Hand Monument, High Court & Secretariat.'
+  },
+  {
+    id: 'rockgarden',
+    name: 'Nek Chand Rock Garden',
+    sector: 'Sector 1 East',
+    x: 140,
+    z: -700,
+    radius: 95,
+    color: '#d97706',
+    icon: '🪨',
+    description: 'Labyrinth of curved terracotta arches, waterfalls, mosaic walls, and recycled ceramic sculptures.'
+  },
+  {
+    id: 'sukhna',
+    name: 'Sukhna Lake Promenade',
+    sector: 'Sector 1 Lakefront',
+    x: 420,
+    z: -420,
+    radius: 130,
+    color: '#0ea5e9',
+    icon: '⛵',
+    description: 'Foothill reservoir at the Shivalik hills with shikara boats, promenade walk, and lighthouse.'
+  },
+  {
+    id: 'rosegarden',
+    name: 'Zakir Hussain Rose Garden',
+    sector: 'Sector 16',
+    x: -420,
+    z: -140,
+    radius: 95,
+    color: '#ec4899',
+    icon: '🌹',
+    description: 'Asia’s largest rose garden with 1,600+ flower beds, pergolas, and curved walking trails.'
+  },
+  {
+    id: 'panjab_uni',
+    name: 'Panjab University & StuC',
+    sector: 'Sector 14',
+    x: -420,
+    z: -420,
+    radius: 105,
+    color: '#ef4444',
+    icon: '🎓',
+    description: 'Iconic geometric white brutalist Gandhi Bhawan sitting on a reflection pool and Student Centre.'
+  },
+  {
+    id: 'isbt17',
+    name: 'ISBT Sector 17 Bus Terminus',
+    sector: 'Sector 17 South',
+    x: -140,
+    z: 140,
+    radius: 85,
+    color: '#3b82f6',
+    icon: '🚌',
+    description: 'Busy central inter-state bus terminal with CTU bus bays and taxi stands.'
+  },
+  {
+    id: 'isbt43',
+    name: 'ISBT Sector 43 & District Courts',
+    sector: 'Sector 43',
+    x: -420,
+    z: 420,
+    radius: 95,
+    color: '#6366f1',
+    icon: '🚍',
+    description: 'Southern inter-state bus hub serving Punjab, Himachal, and Haryana routes.'
+  },
+  {
+    id: 'elante',
+    name: 'Elante Mall & Industrial Area',
+    sector: 'Industrial Phase I',
+    x: 420,
+    z: 140,
+    radius: 105,
+    color: '#a855f7',
+    icon: '🛍️',
+    description: 'Chandigarh’s largest glass-and-steel shopping mall, multiplex, and corporate courtyard.'
+  },
+  {
+    id: 'railway',
+    name: 'Chandigarh Junction Railway Station',
+    sector: 'Daria / East Terminal',
+    x: 420,
+    z: 420,
+    radius: 100,
+    color: '#eab308',
+    icon: '🚆',
+    description: 'Main rail hub featuring Vande Bharat / Shatabdi express platforms and clock tower.'
+  },
+  {
+    id: 'airport',
+    name: 'Shaheed Bhagat Singh Intl Airport',
+    sector: 'South Aero Terminal',
+    x: 140,
+    z: 680,
+    radius: 120,
+    color: '#14b8a6',
+    icon: '✈️',
+    description: 'Modern glass terminal, ATC control tower, and illuminated runway strip.'
+  },
+  {
+    id: 'sector22',
+    name: 'Sector 22 Shastri Market & Safehouse',
+    sector: 'Sector 22',
+    x: -420,
+    z: 140,
+    radius: 90,
+    color: '#22c55e',
+    icon: '🏠',
+    description: 'Bustling street market, Aroma chowk eateries, player safehouse, and custom tuning garage.'
+  }
+];
+
+const SERVICE_STATIONS = [
+  { id: 'fuel_17', type: 'fuel', name: 'IndianOil Sector 17', x: -245, z: -35 },
+  { id: 'fuel_28', type: 'fuel', name: 'HP Petrol Pump Madhya Marg', x: 245, z: -245 },
+  { id: 'fuel_43', type: 'fuel', name: 'Bharat Petroleum Dakshin Marg', x: -245, z: 315 },
+  { id: 'garage_22', type: 'garage', name: 'Sector 22 Customs & Respray', x: -340, z: 75 },
+  { id: 'garage_ind', type: 'garage', name: 'Elante Auto Works & Tuning', x: 340, z: 75 },
+  { id: 'safehouse_22', type: 'safehouse', name: 'Sector 22 Kothi Safehouse', x: -460, z: 185 },
+  { id: 'safehouse_8', type: 'safehouse', name: 'Sector 8 Heritage Villa', x: 140, z: -420 }
+];
+
+const VEHICLE_CATALOG = {
+  hatchback: {
+    id: 'hatchback',
+    name: 'Marut-800 DX',
+    category: 'Hatchback',
+    price: 0,
+    unlockedByDefault: true,
+    maxSpeed: 42,
+    accel: 26,
+    brake: 36,
+    turnRate: 2.55,
+    grip: 0.92,
+    mass: 950,
+    maxHealth: 100,
+    width: 1.9,
+    height: 1.45,
+    length: 3.7,
+    defaultColor: '#e11d48',
+    description: 'Classic nimble Chandigarh family hatchback. Easy to park in Sector 22.'
+  },
+  sedan: {
+    id: 'sedan',
+    name: 'Hindustan Royale / Dzire',
+    category: 'Sedan',
+    price: 4500,
+    unlockedByDefault: true,
+    maxSpeed: 48,
+    accel: 29,
+    brake: 38,
+    turnRate: 2.35,
+    grip: 0.90,
+    mass: 1250,
+    maxHealth: 125,
+    width: 2.05,
+    height: 1.5,
+    length: 4.4,
+    defaultColor: '#f8fafc',
+    description: 'Comfortable executive sedan favored by VIP officials and Chandigarh taxis.'
+  },
+  suv: {
+    id: 'suv',
+    name: 'Sher-E-Punjab 4x4 Thar',
+    category: 'SUV',
+    price: 8500,
+    unlockedByDefault: false,
+    maxSpeed: 54,
+    accel: 34,
+    brake: 40,
+    turnRate: 2.25,
+    grip: 0.94,
+    mass: 1850,
+    maxHealth: 175,
+    width: 2.25,
+    height: 1.95,
+    length: 4.5,
+    defaultColor: '#1e293b',
+    description: 'Gedi Route king! High-clearance 4x4 SUV with heavy bullbars and deep bass.'
+  },
+  sports: {
+    id: 'sports',
+    name: 'Corbusier GT-X',
+    category: 'Luxury Sports',
+    price: 18000,
+    unlockedByDefault: false,
+    maxSpeed: 68,
+    accel: 45,
+    brake: 48,
+    turnRate: 2.65,
+    grip: 0.96,
+    mass: 1400,
+    maxHealth: 130,
+    width: 2.15,
+    height: 1.25,
+    length: 4.6,
+    defaultColor: '#f59e0b',
+    description: 'Low-slung twin-turbo supercar seen cruising Sector 9 & Madhya Marg at midnight.'
+  },
+  autorickshaw: {
+    id: 'autorickshaw',
+    name: 'Chandigarh Tuk-Tuk Auto',
+    category: 'Auto-Rickshaw',
+    price: 2500,
+    unlockedByDefault: true,
+    maxSpeed: 33,
+    accel: 22,
+    brake: 34,
+    turnRate: 3.25,
+    grip: 0.85,
+    mass: 650,
+    maxHealth: 80,
+    width: 1.55,
+    height: 1.75,
+    length: 2.9,
+    defaultColor: '#16a34a',
+    description: 'Iconic yellow-and-green three-wheeler with unbeatable turning radius.'
+  },
+  bike: {
+    id: 'bike',
+    name: 'Royal Punjabi Cruiser 350',
+    category: 'Motorcycle',
+    price: 3500,
+    unlockedByDefault: true,
+    maxSpeed: 56,
+    accel: 38,
+    brake: 42,
+    turnRate: 3.1,
+    grip: 0.91,
+    mass: 420,
+    maxHealth: 75,
+    width: 0.95,
+    height: 1.35,
+    length: 2.3,
+    defaultColor: '#b91c1c',
+    description: 'Heavy thumping cruiser bike built for weaving through ISBT traffic.'
+  },
+  bus: {
+    id: 'bus',
+    name: 'CTU Low-Floor City Bus',
+    category: 'Heavy Bus',
+    price: 12000,
+    unlockedByDefault: false,
+    maxSpeed: 36,
+    accel: 18,
+    brake: 30,
+    turnRate: 1.65,
+    grip: 0.88,
+    mass: 5200,
+    maxHealth: 320,
+    width: 2.65,
+    height: 3.1,
+    length: 9.2,
+    defaultColor: '#dc2626',
+    description: 'Chandigarh Transport Undertaking commuter bus. Massive momentum through roadblocks.'
+  },
+  police: {
+    id: 'police',
+    name: 'Chandigarh Police PCR Interceptor',
+    category: 'Emergency / Law',
+    price: 15000,
+    unlockedByDefault: false,
+    maxSpeed: 60,
+    accel: 39,
+    brake: 44,
+    turnRate: 2.5,
+    grip: 0.95,
+    mass: 1750,
+    maxHealth: 200,
+    width: 2.2,
+    height: 1.85,
+    length: 4.6,
+    defaultColor: '#ffffff',
+    description: 'High-speed Chandigarh Police PCR unit equipped with roof beacon & bullbar.'
+  },
+  ambulance: {
+    id: 'ambulance',
+    name: 'PGIMER Rapid Ambulance 108',
+    category: 'Emergency',
+    price: 9500,
+    unlockedByDefault: false,
+    maxSpeed: 52,
+    accel: 32,
+    brake: 40,
+    turnRate: 2.2,
+    grip: 0.92,
+    mass: 2100,
+    maxHealth: 190,
+    width: 2.25,
+    height: 2.35,
+    length: 5.2,
+    defaultColor: '#f8fafc',
+    description: 'Emergency medical response van with active sirens and sturdy chassis.'
+  }
+};
+
+const CORE_MISSIONS = [
+  {
+    id: 'm1_pickup',
+    number: 1,
+    title: 'Mission 1: The Pickup',
+    category: 'Story',
+    brief: 'Pick up Roshan outside Sector 17 Plaza and rush him to Sukhna Lake Promenade before sunset boat closing time.',
+    reward: 2500,
+    timeLimit: 95,
+    weather: 'sunny',
+    requiredVehicle: null,
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 },
+    stages: [
+      { type: 'goto', label: 'Pick up Roshan at Sector 17 Plaza Entrance', x: -140, z: -55, radius: 14 },
+      { type: 'goto', label: 'Drive Roshan to Sukhna Lake Boat Club', x: 350, z: -320, radius: 16 }
+    ]
+  },
+  {
+    id: 'm2_discipline',
+    number: 2,
+    title: 'Mission 2: Traffic Discipline',
+    category: 'Traffic Rules',
+    brief: 'Chandigarh Traffic Police exam! Drive from Sector 22 Market to Sector 17 Plaza without crossing a red light, crashing, or exceeding 80 km/h.',
+    reward: 3500,
+    timeLimit: 110,
+    weather: 'sunny',
+    requiredVehicle: null,
+    rules: { noRedLight: true, noCrash: true, speedLimit: 80, maxDamage: 2 },
+    stages: [
+      { type: 'goto', label: 'Start at Sector 22 Market Checkout', x: -340, z: 35, radius: 14 },
+      { type: 'goto', label: 'Pass Matka Chowk Checkpoint Cleanly', x: -280, z: -140, radius: 15 },
+      { type: 'goto', label: 'Stop inside Sector 17 Plaza Inspection Bay', x: -140, z: -55, radius: 14 }
+    ]
+  },
+  {
+    id: 'm3_redlight',
+    number: 3,
+    title: 'Mission 3: The Red Light',
+    category: 'Police Action',
+    brief: 'Trigger the CCTV speed/red-light camera at Madhya Marg Chowk to draw away PCR patrols, then lose the police and reach the Sector 22 Safehouse.',
+    reward: 4000,
+    timeLimit: 130,
+    weather: 'sunset',
+    requiredVehicle: null,
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 },
+    stages: [
+      { type: 'trigger_wanted', label: 'Blast through Madhya Marg Intersection Camera to trigger Level 2 Pursuit', x: 0, z: -280, radius: 18, wantedTarget: 2 },
+      { type: 'escape_and_goto', label: 'Evade PCR Line-of-Sight & Reach Sector 22 Safehouse', x: -450, z: 180, radius: 16 }
+    ]
+  },
+  {
+    id: 'm4_airport',
+    number: 4,
+    title: 'Mission 4: Airport Drop',
+    category: 'Story',
+    brief: 'Pick up an NRI passenger from Panjab University Gate and sprint across Dakshin Marg to Chandigarh International Airport before check-in closes!',
+    reward: 4500,
+    timeLimit: 115,
+    weather: 'sunny',
+    requiredVehicle: null,
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 },
+    stages: [
+      { type: 'goto', label: 'Pick up Passenger at Panjab University Gate', x: -320, z: -320, radius: 15 },
+      { type: 'goto', label: 'Pass Tribune Chowk Flyover Corridor', x: 140, z: 280, radius: 18 },
+      { type: 'goto', label: 'Drop Passenger at Airport Departure Terminal', x: 140, z: 610, radius: 18 }
+    ]
+  },
+  {
+    id: 'm5_delivery',
+    number: 5,
+    title: 'Mission 5: The Delivery',
+    category: 'Precision',
+    brief: 'Deliver fragile architectural blueprints from Capitol Complex to Elante Mall Corporate Office while obeying traffic signals and keeping damage under 15%.',
+    reward: 4800,
+    timeLimit: 125,
+    weather: 'cloudy',
+    requiredVehicle: null,
+    rules: { noRedLight: true, noCrash: false, speedLimit: 95, maxDamage: 15 },
+    stages: [
+      { type: 'goto', label: 'Collect Blueprints at Capitol Complex Gate', x: -140, z: -595, radius: 15 },
+      { type: 'goto', label: 'Deliver Undamaged Blueprints to Elante Mall', x: 350, z: 140, radius: 16 }
+    ]
+  },
+  {
+    id: 'm6_police_chase',
+    number: 6,
+    title: 'Mission 6: Police Chase',
+    category: 'Police Action',
+    brief: 'You are ambushed by a Level 3 Tactical Roadblock unit near ISBT 17! Break through the cordon, shake off the pursuit, and reach the Sector 8 Safehouse.',
+    reward: 5500,
+    timeLimit: 140,
+    weather: 'night',
+    requiredVehicle: null,
+    startWanted: 3,
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 },
+    stages: [
+      { type: 'goto', label: 'Break through the Udyog Path Cordon', x: 120, z: 0, radius: 18 },
+      { type: 'escape_and_goto', label: 'Clear Wanted Level & Hide at Sector 8 Heritage Safehouse', x: 140, z: -410, radius: 16 }
+    ]
+  },
+  {
+    id: 'm7_vip_escort',
+    number: 7,
+    title: 'Mission 7: VIP Escort',
+    category: 'Precision',
+    brief: 'Chauffeur a High Court dignitary from Rose Garden to Capitol Secretariat without a single scratch on the vehicle!',
+    reward: 6000,
+    timeLimit: 110,
+    weather: 'sunny',
+    requiredVehicle: null,
+    rules: { noRedLight: false, noCrash: true, speedLimit: false, maxDamage: 3 },
+    stages: [
+      { type: 'goto', label: 'Pick up Dignitary at Zakir Hussain Rose Garden', x: -320, z: -140, radius: 15 },
+      { type: 'goto', label: 'Escort Smoothly to Capitol Complex Secretariat', x: -140, z: -610, radius: 16 }
+    ]
+  },
+  {
+    id: 'm8_parking',
+    number: 8,
+    title: 'Mission 8: Parking Challenge',
+    category: 'Skill',
+    brief: 'Navigate tight cones and park cleanly at under 5 km/h inside 3 designated bays at Sector 17, ISBT 17, and Elante Mall without touching any cars.',
+    reward: 4200,
+    timeLimit: 120,
+    weather: 'sunny',
+    requiredVehicle: null,
+    rules: { noRedLight: false, noCrash: true, speedLimit: false, maxDamage: 5 },
+    stages: [
+      { type: 'park', label: 'Stop Completely inside Sector 17 Parking Bay #1', x: -95, z: -35, radius: 7 },
+      { type: 'park', label: 'Stop Completely inside ISBT 17 Bus Bay #2', x: -95, z: 85, radius: 7 },
+      { type: 'park', label: 'Stop Completely inside Elante VIP Slot #3', x: 335, z: 95, radius: 7 }
+    ]
+  },
+  {
+    id: 'm9_taxi',
+    number: 9,
+    title: 'Mission 9: The Taxi Driver',
+    category: 'Career',
+    brief: 'Complete 3 back-to-back Chandigarh passenger fares cleanly to maintain a 5-Star Driver Rating and earn big tips.',
+    reward: 5200,
+    timeLimit: 160,
+    weather: 'sunny',
+    requiredVehicle: null,
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 35 },
+    stages: [
+      { type: 'goto', label: 'Fare 1 Pickup: ISBT Sector 43 Stand', x: -330, z: 330, radius: 15 },
+      { type: 'goto', label: 'Fare 1 Drop & Fare 2 Pickup: Sector 17 Plaza', x: -140, z: -45, radius: 15 },
+      { type: 'goto', label: 'Fare 2 Drop & Fare 3 Pickup: Sukhna Lake', x: 320, z: -320, radius: 15 },
+      { type: 'goto', label: 'Fare 3 Final Drop: Chandigarh Railway Station', x: 340, z: 340, radius: 16 }
+    ]
+  },
+  {
+    id: 'm10_sprint',
+    number: 10,
+    title: 'Mission 10: Sector Sprint (Gedi Route Race)',
+    category: 'Racing',
+    brief: 'High-speed checkpoint sprint along Madhya Marg, Sukhna Path, and Jan Marg! Hit all 5 checkpoints before the rival street racers timer expires.',
+    reward: 6500,
+    timeLimit: 95,
+    weather: 'sunset',
+    requiredVehicle: null,
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 },
+    stages: [
+      { type: 'goto', label: 'Checkpoint 1/5: Jan Marg Roundabout', x: -280, z: 0, radius: 18 },
+      { type: 'goto', label: 'Checkpoint 2/5: Madhya Marg West', x: -280, z: -280, radius: 18 },
+      { type: 'goto', label: 'Checkpoint 3/5: Madhya Marg Central', x: 0, z: -280, radius: 18 },
+      { type: 'goto', label: 'Checkpoint 4/5: Sukhna Lake Turnoff', x: 280, z: -280, radius: 18 },
+      { type: 'goto', label: 'Finish Line 5/5: Elante Expressway', x: 280, z: 0, radius: 20 }
+    ]
+  },
+  {
+    id: 'm11_emergency',
+    number: 11,
+    title: 'Mission 11: Emergency Response',
+    category: 'Emergency',
+    brief: 'Commandeer the Emergency Response unit! Rush medical aid to an incident at Rock Garden and transport the patient to Sector 16 General Hospital.',
+    reward: 5800,
+    timeLimit: 105,
+    weather: 'rain',
+    spawnVehicle: 'ambulance',
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 40 },
+    stages: [
+      { type: 'goto', label: 'Respond to Incident at Rock Garden Gate', x: 140, z: -590, radius: 16 },
+      { type: 'goto', label: 'Rush Patient to Sector 16 Hospital Emergency Wing', x: -310, z: -195, radius: 16 }
+    ]
+  },
+  {
+    id: 'm12_getaway',
+    number: 12,
+    title: 'Mission 12: The Getaway (Grand Finale)',
+    category: 'Heist Finale',
+    brief: 'After a high-stakes diamond heist near Elante, survive a Level 4 Heavy Pursuit in monsoon rain, hit the Railway Station drop-off, and escape to Airport Runway!',
+    reward: 12000,
+    timeLimit: 165,
+    weather: 'rain',
+    startWanted: 4,
+    rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 },
+    stages: [
+      { type: 'goto', label: 'Drop Heist Crew at Chandigarh Railway Station', x: 350, z: 340, radius: 18 },
+      { type: 'goto', label: 'Pass Dakshin Marg Police Barricade', x: 0, z: 280, radius: 18 },
+      { type: 'escape_and_goto', label: 'Lose Police & Board Private Jet at Airport Runway', x: 140, z: 640, radius: 20 }
+    ]
+  }
+];
+
+// Generate 22 additional playable mission variations across all landmarks, weather & difficulty
+const MISSION_VARIATIONS = [
+  { id: 'v1', number: 13, title: 'Variation 13: Monsoon Tuk-Tuk Dash', category: 'Side Contract', brief: 'Drive from ISBT 43 to Rose Garden during heavy monsoon rain.', reward: 2200, timeLimit: 90, weather: 'rain', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'goto', label: 'Reach Rose Garden Gate in Rain', x: -320, z: -140, radius: 15 }] },
+  { id: 'v2', number: 14, title: 'Variation 14: Midnight Gedi Sprint', category: 'Racing', brief: 'Nighttime high-speed sprint from Panjab University to Sukhna Lake.', reward: 3200, timeLimit: 75, weather: 'night', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'goto', label: 'Hit Madhya Marg Chowk', x: 0, z: -280, radius: 18 }, { type: 'goto', label: 'Finish at Sukhna Lake', x: 340, z: -340, radius: 16 }] },
+  { id: 'v3', number: 15, title: 'Variation 15: Foggy Morning Challan Test', category: 'Traffic Rules', brief: 'Zero violations allowed! Drive from Railway Station to Sector 17 in dense winter fog.', reward: 3800, timeLimit: 120, weather: 'fog', rules: { noRedLight: true, noCrash: true, speedLimit: 80, maxDamage: 5 }, stages: [{ type: 'goto', label: 'Reach Sector 17 Plaza Safely', x: -140, z: -55, radius: 15 }] },
+  { id: 'v4', number: 16, title: 'Variation 16: Student Centre Food Express', category: 'Courier', brief: 'Deliver hot parathas from Panjab University StuC to Sector 22 Market.', reward: 2100, timeLimit: 70, weather: 'sunny', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 25 }, stages: [{ type: 'goto', label: 'Pickup at PU StuC', x: -340, z: -340, radius: 15 }, { type: 'goto', label: 'Drop at Sector 22 Market', x: -340, z: 95, radius: 15 }] },
+  { id: 'v5', number: 17, title: 'Variation 17: Shatabdi Express Connection', category: 'Taxi', brief: 'Rush a late traveller from Sector 17 ISBT to Chandigarh Railway Station.', reward: 2900, timeLimit: 80, weather: 'sunset', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'goto', label: 'Pickup at ISBT 17', x: -120, z: 95, radius: 15 }, { type: 'goto', label: 'Reach Railway Station Platform', x: 340, z: 340, radius: 16 }] },
+  { id: 'v6', number: 18, title: 'Variation 18: High Court Security Run', category: 'VIP', brief: 'Escort confidential files from Capitol Complex to District Courts Sector 43 without crashing.', reward: 4400, timeLimit: 110, weather: 'sunny', rules: { noRedLight: false, noCrash: true, speedLimit: false, maxDamage: 2 }, stages: [{ type: 'goto', label: 'Start at Capitol Complex', x: -140, z: -595, radius: 15 }, { type: 'goto', label: 'Reach Sector 43 Courts', x: -340, z: 340, radius: 16 }] },
+  { id: 'v7', number: 19, title: 'Variation 19: Sukhna Sunrise Sightseeing', category: 'Sightseeing', brief: 'Tour 3 heritage landmarks: Capitol Complex, Rock Garden, and Sukhna Lake.', reward: 3600, timeLimit: 130, weather: 'sunset', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'goto', label: 'Visit Capitol Complex', x: -140, z: -590, radius: 16 }, { type: 'goto', label: 'Visit Rock Garden', x: 140, z: -590, radius: 16 }, { type: 'goto', label: 'Visit Sukhna Lake', x: 340, z: -340, radius: 16 }] },
+  { id: 'v8', number: 20, title: 'Variation 20: Industrial Cargo Haul', category: 'Courier', brief: 'Transport heavy electronics from Industrial Area Elante to Airport Cargo Bay.', reward: 3300, timeLimit: 95, weather: 'cloudy', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 20 }, stages: [{ type: 'goto', label: 'Load at Elante Industrial Hub', x: 340, z: 140, radius: 15 }, { type: 'goto', label: 'Unload at Airport Cargo Terminal', x: 140, z: 610, radius: 16 }] },
+  { id: 'v9', number: 21, title: 'Variation 21: Dakshin Marg Drag Strip', category: 'Racing', brief: 'Flat-out drag race along Dakshin Marg from West to East!', reward: 3900, timeLimit: 55, weather: 'sunny', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'goto', label: 'Start Line: Dakshin Marg West', x: -520, z: 280, radius: 18 }, { type: 'goto', label: 'Midpoint: Dakshin Marg Roundabout', x: 0, z: 280, radius: 18 }, { type: 'goto', label: 'Finish: Dakshin Marg East', x: 520, z: 280, radius: 18 }] },
+  { id: 'v10', number: 22, title: 'Variation 22: PCR Heat Evasion (Level 4)', category: 'Police Action', brief: 'Survive a Level 4 pursuit in thick fog and escape to Panjab University campus.', reward: 6200, timeLimit: 150, weather: 'fog', startWanted: 4, rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'escape_and_goto', label: 'Evade Level 4 Police & Reach PU Campus', x: -340, z: -340, radius: 16 }] },
+  { id: 'v11', number: 23, title: 'Variation 23: Precision Rain Parking', category: 'Skill', brief: 'Park cleanly on slick wet asphalt at Sukhna Lake and Rock Garden.', reward: 3700, timeLimit: 105, weather: 'rain', rules: { noRedLight: false, noCrash: true, speedLimit: false, maxDamage: 5 }, stages: [{ type: 'park', label: 'Park at Sukhna Bay', x: 320, z: -295, radius: 7 }, { type: 'park', label: 'Park at Rock Garden Bay', x: 140, z: -575, radius: 7 }] },
+  { id: 'v12', number: 24, title: 'Variation 24: CTU Bus Corridor Tour', category: 'Career', brief: 'Stop at 4 major bus stops connecting ISBT 43, Sector 22, Sector 17, and ISBT 17.', reward: 4600, timeLimit: 145, weather: 'sunny', spawnVehicle: 'bus', rules: { noRedLight: true, noCrash: false, speedLimit: false, maxDamage: 30 }, stages: [{ type: 'park', label: 'Bus Stop 1: ISBT 43', x: -310, z: 310, radius: 10 }, { type: 'park', label: 'Bus Stop 2: Sector 22 Market', x: -310, z: 95, radius: 10 }, { type: 'park', label: 'Bus Stop 3: Sector 17 Plaza', x: -120, z: -55, radius: 10 }, { type: 'park', label: 'Bus Stop 4: ISBT 17 Terminus', x: -120, z: 95, radius: 10 }] },
+  { id: 'v13', number: 25, title: 'Variation 25: Midnight VIP Airport Run', category: 'VIP', brief: 'Drive a diplomat from Capitol Complex to the Airport at midnight without any police attention.', reward: 5100, timeLimit: 120, weather: 'night', rules: { noRedLight: true, noCrash: true, speedLimit: false, maxDamage: 5 }, stages: [{ type: 'goto', label: 'Pickup at Capitol Complex', x: -140, z: -595, radius: 15 }, { type: 'goto', label: 'Reach Airport VIP Gate', x: 140, z: 610, radius: 16 }] },
+  { id: 'v14', number: 26, title: 'Variation 26: Rose Garden Floral Delivery', category: 'Courier', brief: 'Deliver fresh rose bouquets to Elante Mall before they wilt.', reward: 2600, timeLimit: 80, weather: 'sunny', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 20 }, stages: [{ type: 'goto', label: 'Pickup at Rose Garden', x: -320, z: -140, radius: 15 }, { type: 'goto', label: 'Drop at Elante Mall Entrance', x: 340, z: 140, radius: 15 }] },
+  { id: 'v15', number: 27, title: 'Variation 27: Citywide Lockdown Survival (Level 5)', category: 'Police Action', brief: 'Maximum heat! Survive a Level 5 Citywide Search and reach the Airport hangar.', reward: 9500, timeLimit: 180, weather: 'night', startWanted: 5, rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'escape_and_goto', label: 'Evade Level 5 Search & Reach Airport Hangar', x: 180, z: 630, radius: 18 }] },
+  { id: 'v16', number: 28, title: 'Variation 28: Jan Marg Speed Trial', category: 'Racing', brief: 'North-to-South time trial down Jan Marg from Capitol Complex to ISBT 43.', reward: 3400, timeLimit: 65, weather: 'sunny', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'goto', label: 'Start at Jan Marg North', x: -280, z: -540, radius: 18 }, { type: 'goto', label: 'Pass Jan Marg Central', x: -280, z: 0, radius: 18 }, { type: 'goto', label: 'Finish at Jan Marg South', x: -280, z: 540, radius: 18 }] },
+  { id: 'v17', number: 29, title: 'Variation 29: Monsoon Ambulance Rescue', category: 'Emergency', brief: 'Respond to a highway pileup near Railway Station and rush to Sector 16 Hospital.', reward: 4900, timeLimit: 100, weather: 'rain', spawnVehicle: 'ambulance', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 35 }, stages: [{ type: 'goto', label: 'Reach Railway Station Incident', x: 340, z: 340, radius: 16 }, { type: 'goto', label: 'Return to Sector 16 Hospital', x: -310, z: -195, radius: 16 }] },
+  { id: 'v18', number: 30, title: 'Variation 30: Strict Chauffeur Exam II', category: 'Traffic Rules', brief: 'Obey all traffic lights and stay under 80 km/h from Sukhna Lake to ISBT 43.', reward: 4300, timeLimit: 135, weather: 'cloudy', rules: { noRedLight: true, noCrash: true, speedLimit: 80, maxDamage: 3 }, stages: [{ type: 'goto', label: 'Start at Sukhna Lake', x: 320, z: -320, radius: 15 }, { type: 'goto', label: 'Finish Cleanly at ISBT 43', x: -320, z: 320, radius: 15 }] },
+  { id: 'v19', number: 31, title: 'Variation 31: Perimeter Ring Rally', category: 'Racing', brief: 'Complete a full high-speed lap around Chandigarh’s outer arterial ring!', reward: 7500, timeLimit: 140, weather: 'sunset', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 100 }, stages: [{ type: 'goto', label: 'Corner 1: North-West', x: -560, z: -560, radius: 22 }, { type: 'goto', label: 'Corner 2: North-East', x: 560, z: -560, radius: 22 }, { type: 'goto', label: 'Corner 3: South-East', x: 560, z: 560, radius: 22 }, { type: 'goto', label: 'Corner 4: South-West Finish', x: -560, z: 560, radius: 22 }] },
+  { id: 'v20', number: 32, title: 'Variation 32: Inspector Patrol Duty', category: 'Police Action', brief: 'Patrol 3 major roundabouts in a Police PCR Interceptor in under 90 seconds.', reward: 4700, timeLimit: 90, weather: 'night', spawnVehicle: 'police', rules: { noRedLight: false, noCrash: false, speedLimit: false, maxDamage: 40 }, stages: [{ type: 'goto', label: 'Patrol Matka Chowk', x: 0, z: -280, radius: 18 }, { type: 'goto', label: 'Patrol Sector 17 Chowk', x: 0, z: 0, radius: 18 }, { type: 'goto', label: 'Patrol Tribune Chowk', x: 280, z: 280, radius: 18 }] }
+];
+
+const ALL_MISSIONS = [...CORE_MISSIONS, ...MISSION_VARIATIONS];
+
+const CHEAT_CODES = {
+  FULLHEALTH: { desc: 'Restored player health & armor to 100%' },
+  REPAIRCAR: { desc: 'Repaired current vehicle engine, body & refilled fuel' },
+  ADD5000: { desc: 'Credited ₹5,000 to player wallet' },
+  SPAWNCAR: { desc: 'Spawned Hindustan Royale Sedan ahead of player' },
+  SPAWNSUV: { desc: 'Spawned Sher-E-Punjab 4x4 Thar SUV ahead of player' },
+  SPAWNBIKE: { desc: 'Spawned Royal Punjabi Cruiser 350 Motorcycle' },
+  NOS: { desc: 'Activated High-Octane Nitro Boost + Refilled NOS Tank' },
+  CLEARCHASE: { desc: 'Cleared Chandigarh Police Wanted Level to 0' },
+  WANTEDUP: { desc: 'Increased Police Wanted Level (+1 Star)' },
+  WANTEDDOWN: { desc: 'Decreased Police Wanted Level (-1 Star)' },
+  SUNNYDAY: { desc: 'Set weather to Clear Chandigarh Sunshine (11:30 AM)' },
+  RAINMODE: { desc: 'Activated Shivalik Monsoon Rain & Wet Roads' },
+  MIDNIGHT: { desc: 'Set time to 00:00 Midnight with Neon Streetlights' },
+  SUPERJUMP: { desc: 'Toggled Super-Jump mode when on foot' },
+  SLOWMO: { desc: 'Toggled Cinematic Slow-Motion time dilation (0.45x)' }
+};
+
+// ============================================================================
+// MODULE 2: PROCEDURAL WEB AUDIO SYNTHESIZER & STORAGE MANAGER
+// ============================================================================
+
+class SoundEngine {
+  constructor() {
+    this.ctx = null;
+    this.muted = false;
+    this.masterVolume = 0.65;
+    this.engineOsc = null;
+    this.engineSub = null;
+    this.engineGain = null;
+    this.sirenOsc = null;
+    this.sirenGain = null;
+    this.rainNode = null;
+    this.rainGain = null;
+    this.initialized = false;
+    this.sirenPhase = 0;
+  }
+
+  init() {
+    if (this.initialized) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      this.ctx = new AudioCtx();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = this.muted ? 0 : this.masterVolume;
+      this.master.connect(this.ctx.destination);
+
+      // Engine continuous synthesizer
+      this.engineOsc = this.ctx.createOscillator();
+      this.engineSub = this.ctx.createOscillator();
+      this.engineGain = this.ctx.createGain();
+      this.engineOsc.type = 'sawtooth';
+      this.engineSub.type = 'triangle';
+      this.engineOsc.frequency.value = 55;
+      this.engineSub.frequency.value = 27.5;
+      this.engineGain.gain.value = 0.0;
+      this.engineOsc.connect(this.engineGain);
+      this.engineSub.connect(this.engineGain);
+      this.engineGain.connect(this.master);
+      this.engineOsc.start();
+      this.engineSub.start();
+
+      // Police siren synthesizer
+      this.sirenOsc = this.ctx.createOscillator();
+      this.sirenGain = this.ctx.createGain();
+      this.sirenOsc.type = 'square';
+      this.sirenOsc.frequency.value = 620;
+      this.sirenGain.gain.value = 0.0;
+      this.sirenOsc.connect(this.sirenGain);
+      this.sirenGain.connect(this.master);
+      this.sirenOsc.start();
+
+      // White noise buffer for rain and skids
+      const bufferSize = this.ctx.sampleRate * 2;
+      this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = this.noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      this.rainNode = this.ctx.createBufferSource();
+      this.rainNode.buffer = this.noiseBuffer;
+      this.rainNode.loop = true;
+      const rainFilter = this.ctx.createBiquadFilter();
+      rainFilter.type = 'bandpass';
+      rainFilter.frequency.value = 1100;
+      this.rainGain = this.ctx.createGain();
+      this.rainGain.gain.value = 0;
+      this.rainNode.connect(rainFilter);
+      rainFilter.connect(this.rainGain);
+      this.rainGain.connect(this.master);
+      this.rainNode.start();
+
+      this.initialized = true;
+    } catch (e) {
+      // Ignore audio context blocks until gesture
+    }
+  }
+
+  setVolume(val) {
+    this.masterVolume = Math.max(0, Math.min(1, val));
+    if (this.master && !this.muted) {
+      this.master.gain.setTargetAtTime(this.masterVolume, this.ctx.currentTime, 0.05);
+    }
+  }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    if (this.master && this.ctx) {
+      this.master.gain.setTargetAtTime(this.muted ? 0 : this.masterVolume, this.ctx.currentTime, 0.05);
+    }
+    return this.muted;
+  }
+
+  updateContinuous(inVehicle, speed, maxSpeed, wantedLevel, isRaining, dt) {
+    if (!this.initialized || !this.ctx) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+    const now = this.ctx.currentTime;
+
+    // Engine RPM pitch + gear shift modulation
+    if (inVehicle) {
+      const ratio = Math.min(1, Math.abs(speed) / (maxSpeed || 45));
+      const gearMod = (ratio * 4) % 1;
+      const baseFreq = 48 + ratio * 115 + gearMod * 32;
+      this.engineOsc.frequency.setTargetAtTime(baseFreq, now, 0.04);
+      this.engineSub.frequency.setTargetAtTime(baseFreq * 0.5, now, 0.04);
+      this.engineGain.gain.setTargetAtTime(0.08 + ratio * 0.09, now, 0.06);
+    } else {
+      this.engineGain.gain.setTargetAtTime(0.0, now, 0.08);
+    }
+
+    // Police Siren modulation
+    if (wantedLevel >= 2) {
+      this.sirenPhase += dt * (3.5 + wantedLevel * 0.6);
+      const sFreq = 640 + Math.sin(this.sirenPhase) * 240;
+      this.sirenOsc.frequency.setTargetAtTime(sFreq, now, 0.03);
+      this.sirenGain.gain.setTargetAtTime(0.055, now, 0.1);
+    } else {
+      this.sirenGain.gain.setTargetAtTime(0.0, now, 0.1);
+    }
+
+    // Rain loop
+    if (this.rainGain) {
+      this.rainGain.gain.setTargetAtTime(isRaining ? 0.06 : 0.0, now, 0.25);
+    }
+  }
+
+  playHorn(type = 'car') {
+    this.init();
+    if (!this.ctx || this.muted) return;
+    const now = this.ctx.currentTime;
+    if (type === 'bus' || type === 'suv') {
+      // Musical Indian Horn (3 notes)
+      const notes = [440, 554.37, 659.25, 554.37];
+      notes.forEach((freq, idx) => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+        g.gain.setValueAtTime(0.14, now + idx * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.085);
+        osc.connect(g);
+        g.connect(this.master);
+        osc.start(now + idx * 0.09);
+        osc.stop(now + idx * 0.09 + 0.09);
+      });
+    } else {
+      const osc1 = this.ctx.createOscillator();
+      const osc2 = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc1.type = 'sawtooth';
+      osc2.type = 'square';
+      osc1.frequency.value = type === 'autorickshaw' ? 580 : 390;
+      osc2.frequency.value = type === 'autorickshaw' ? 720 : 490;
+      g.gain.setValueAtTime(0.15, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+      osc1.connect(g);
+      osc2.connect(g);
+      g.connect(this.master);
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 0.33);
+      osc2.stop(now + 0.33);
+    }
+  }
+
+  playSkid() {
+    this.init();
+    if (!this.ctx || this.muted || !this.noiseBuffer) return;
+    const now = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1950;
+    filter.Q.value = 4.5;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.09, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.master);
+    src.start(now);
+    src.stop(now + 0.19);
+  }
+
+  playCrash(intensity = 1) {
+    this.init();
+    if (!this.ctx || this.muted || !this.noiseBuffer) return;
+    const now = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 480;
+    const g = this.ctx.createGain();
+    const vol = Math.min(0.35, 0.12 * intensity);
+    g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    src.connect(filter);
+    filter.connect(g);
+    g.connect(this.master);
+    src.start(now);
+    src.stop(now + 0.36);
+  }
+
+  playChime(type = 'success') {
+    this.init();
+    if (!this.ctx || this.muted) return;
+    const now = this.ctx.currentTime;
+    const freqs =
+      type === 'success'
+        ? [523.25, 659.25, 783.99, 1046.5]
+        : type === 'fail'
+        ? [349.23, 311.13, 261.63]
+        : [587.33, 880];
+    freqs.forEach((f, idx) => {
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, now + idx * 0.08);
+      g.gain.setValueAtTime(0.16, now + idx * 0.08);
+      g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.22);
+      osc.connect(g);
+      g.connect(this.master);
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 0.24);
+    });
+  }
+}
+
+const STORAGE_KEY = 'gta_chandigarh_save_v1';
+
+const DEFAULT_SAVE_STATE = {
+  money: 6500,
+  health: 100,
+  unlockedVehicles: ['hatchback', 'sedan', 'autorickshaw', 'bike'],
+  selectedVehicle: 'hatchback',
+  vehicleCustomizations: {
+    hatchback: { color: '#e11d48', wheelColor: '#e2e8f0', engineLevel: 1, armorLevel: 1 },
+    sedan: { color: '#f8fafc', wheelColor: '#e2e8f0', engineLevel: 1, armorLevel: 1 },
+    suv: { color: '#1e293b', wheelColor: '#94a3b8', engineLevel: 1, armorLevel: 1 },
+    sports: { color: '#f59e0b', wheelColor: '#fde047', engineLevel: 1, armorLevel: 1 },
+    autorickshaw: { color: '#16a34a', wheelColor: '#cbd5e1', engineLevel: 1, armorLevel: 1 },
+    bike: { color: '#b91c1c', wheelColor: '#cbd5e1', engineLevel: 1, armorLevel: 1 },
+    bus: { color: '#dc2626', wheelColor: '#cbd5e1', engineLevel: 1, armorLevel: 1 },
+    police: { color: '#ffffff', wheelColor: '#94a3b8', engineLevel: 1, armorLevel: 1 },
+    ambulance: { color: '#f8fafc', wheelColor: '#cbd5e1', engineLevel: 1, armorLevel: 1 }
+  },
+  completedMissions: [],
+  collectedTrophies: [],
+  stats: {
+    missionsCompleted: 0,
+    totalFinesPaid: 0,
+    redLightsRun: 0,
+    distanceDrivenKm: 0,
+    cheatsUsed: 0
+  },
+  settings: {
+    volume: 0.65,
+    graphicsQuality: 'high',
+    cameraSensitivity: 1.0,
+    trafficDensity: 'normal'
+  }
+};
+
+function loadGameState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return JSON.parse(JSON.stringify(DEFAULT_SAVE_STATE));
+    const parsed = JSON.parse(raw);
+    return {
+      ...JSON.parse(JSON.stringify(DEFAULT_SAVE_STATE)),
+      ...parsed,
+      vehicleCustomizations: {
+        ...DEFAULT_SAVE_STATE.vehicleCustomizations,
+        ...(parsed.vehicleCustomizations || {})
+      },
+      settings: {
+        ...DEFAULT_SAVE_STATE.settings,
+        ...(parsed.settings || {})
+      }
+    };
+  } catch (e) {
+    return JSON.parse(JSON.stringify(DEFAULT_SAVE_STATE));
+  }
+}
+
+function saveGameState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ============================================================================
+// MODULE 3: 3D CHANDIGARH WORLD MAP, LANDMARKS, TRAFFIC SIGNALS & VEHICLES
+// ============================================================================
+
+
+function buildVehicleMesh(THREE, typeId, customColor, wheelColor = '#cbd5e1', isPolice = false) {
+  const spec = VEHICLE_CATALOG[typeId] || VEHICLE_CATALOG.hatchback;
+  const group = new THREE.Group();
+  const colorHex = customColor || spec.defaultColor;
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: colorHex,
+    roughness: 0.32,
+    metalness: 0.45
+  });
+  const darkMat = new THREE.MeshStandardMaterial({ color: '#111827', roughness: 0.7 });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: '#38bdf8',
+    roughness: 0.15,
+    metalness: 0.8,
+    transparent: true,
+    opacity: 0.72
+  });
+  const chromeMat = new THREE.MeshStandardMaterial({ color: wheelColor, roughness: 0.3, metalness: 0.8 });
+  const headlightMat = new THREE.MeshBasicMaterial({ color: '#fef9c3' });
+  const taillightMat = new THREE.MeshBasicMaterial({ color: '#ef4444' });
+
+  const w = spec.width;
+  const h = spec.height;
+  const l = spec.length;
+
+  if (typeId === 'bike') {
+    // Motorcycle mesh
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.55, 1.55), bodyMat);
+    frame.position.set(0, 0.65, 0);
+    frame.castShadow = true;
+    group.add(frame);
+
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.08), chromeMat);
+    handle.position.set(0, 1.12, 0.45);
+    group.add(handle);
+
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.16, 0.75), darkMat);
+    seat.position.set(0, 0.88, -0.2);
+    group.add(seat);
+
+    const riderBody = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.68, 0.35), new THREE.MeshStandardMaterial({ color: '#1e40af' }));
+    riderBody.position.set(0, 1.32, -0.15);
+    group.add(riderBody);
+
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), new THREE.MeshStandardMaterial({ color: '#f59e0b' }));
+    helmet.position.set(0, 1.82, -0.1);
+    group.add(helmet);
+  } else if (typeId === 'autorickshaw') {
+    // Indian Green & Yellow Auto-Rickshaw
+    const lowerBody = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.48, l), new THREE.MeshStandardMaterial({ color: '#16a34a', roughness: 0.5 }));
+    lowerBody.position.y = h * 0.32;
+    lowerBody.castShadow = true;
+    group.add(lowerBody);
+
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(w * 0.96, h * 0.48, l * 0.84), new THREE.MeshStandardMaterial({ color: '#eab308', roughness: 0.4 }));
+    canopy.position.set(0, h * 0.78, -0.12);
+    canopy.castShadow = true;
+    group.add(canopy);
+
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(w * 0.86, h * 0.36, 0.08), glassMat);
+    windshield.position.set(0, h * 0.72, l * 0.35);
+    group.add(windshield);
+  } else {
+    // Car / SUV / Sports / Bus / Police / Ambulance chassis
+    const chassisH = typeId === 'bus' ? h * 0.85 : h * 0.46;
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(w, chassisH, l), bodyMat);
+    chassis.position.y = chassisH * 0.5 + 0.28;
+    chassis.castShadow = true;
+    chassis.receiveShadow = true;
+    group.add(chassis);
+
+    if (typeId !== 'bus') {
+      const cabinL = typeId === 'sports' ? l * 0.48 : l * 0.56;
+      const cabinH = h * 0.42;
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(w * 0.88, cabinH, cabinL), bodyMat);
+      cabin.position.set(0, chassisH + cabinH * 0.5 + 0.24, -l * 0.05);
+      cabin.castShadow = true;
+      group.add(cabin);
+
+      const glassBox = new THREE.Mesh(new THREE.BoxGeometry(w * 0.90, cabinH * 0.78, cabinL * 0.96), glassMat);
+      glassBox.position.copy(cabin.position);
+      group.add(glassBox);
+    } else {
+      // CTU Bus windows stripe
+      const winBand = new THREE.Mesh(new THREE.BoxGeometry(w * 1.01, h * 0.32, l * 0.92), glassMat);
+      winBand.position.set(0, h * 0.65, 0);
+      group.add(winBand);
+    }
+
+    // Bullbar for SUV & Police
+    if (typeId === 'suv' || typeId === 'police') {
+      const bullbar = new THREE.Mesh(new THREE.BoxGeometry(w * 0.75, 0.45, 0.18), darkMat);
+      bullbar.position.set(0, 0.58, l * 0.51);
+      group.add(bullbar);
+    }
+  }
+
+  // Wheels
+  const wheelRadius = typeId === 'bus' ? 0.52 : typeId === 'suv' ? 0.44 : 0.34;
+  const wheelGeo = new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.26, 14);
+  wheelGeo.rotateZ(Math.PI / 2);
+
+  const wheelPositions =
+    typeId === 'bike'
+      ? [
+          [0, wheelRadius, l * 0.35],
+          [0, wheelRadius, -l * 0.35]
+        ]
+      : typeId === 'autorickshaw'
+      ? [
+          [0, wheelRadius, l * 0.36],
+          [-w * 0.45, wheelRadius, -l * 0.34],
+          [w * 0.45, wheelRadius, -l * 0.34]
+        ]
+      : [
+          [-w * 0.48, wheelRadius, l * 0.32],
+          [w * 0.48, wheelRadius, l * 0.32],
+          [-w * 0.48, wheelRadius, -l * 0.32],
+          [w * 0.48, wheelRadius, -l * 0.32]
+        ];
+
+  group.userData.wheels = [];
+  wheelPositions.forEach(([wx, wy, wz]) => {
+    const wheel = new THREE.Mesh(wheelGeo, darkMat);
+    wheel.position.set(wx, wy, wz);
+    const hub = new THREE.Mesh(
+      new THREE.CylinderGeometry(wheelRadius * 0.55, wheelRadius * 0.55, 0.28, 10).rotateZ(Math.PI / 2),
+      chromeMat
+    );
+    wheel.add(hub);
+    group.add(wheel);
+    group.userData.wheels.push(wheel);
+  });
+
+  // Headlights & Taillights
+  const hlLeft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.1), headlightMat);
+  hlLeft.position.set(-w * 0.32, 0.62, l * 0.5 + 0.02);
+  const hlRight = hlLeft.clone();
+  hlRight.position.x = w * 0.32;
+  group.add(hlLeft, hlRight);
+
+  const tlLeft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.1), taillightMat);
+  tlLeft.position.set(-w * 0.32, 0.62, -l * 0.5 - 0.02);
+  const tlRight = tlLeft.clone();
+  tlRight.position.x = w * 0.32;
+  group.add(tlLeft, tlRight);
+
+  // Police or Emergency Beacon Bar
+  if (isPolice || typeId === 'police' || typeId === 'ambulance') {
+    const bar = new THREE.Group();
+    const redBeacon = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.18, 0.25),
+      new THREE.MeshBasicMaterial({ color: '#ef4444' })
+    );
+    redBeacon.position.x = -0.25;
+    const blueBeacon = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.18, 0.25),
+      new THREE.MeshBasicMaterial({ color: '#3b82f6' })
+    );
+    blueBeacon.position.x = 0.25;
+    bar.add(redBeacon, blueBeacon);
+    bar.position.set(0, h + 0.22, 0);
+    group.add(bar);
+    group.userData.beacon = { redBeacon, blueBeacon };
+  }
+
+  // Headlight SpotLight for Night Driving
+  const headSpot = new THREE.SpotLight(0xfffbeb, 0, 58, Math.PI / 4.5, 0.45, 1.2);
+  headSpot.position.set(0, 0.85, l * 0.5);
+  const targetObj = new THREE.Object3D();
+  targetObj.position.set(0, 0.2, l * 0.5 + 28);
+  group.add(targetObj);
+  headSpot.target = targetObj;
+  group.add(headSpot);
+  group.userData.headSpot = headSpot;
+
+  return group;
+}
+
+function buildPlayerCharacterMesh(THREE) {
+  const group = new THREE.Group();
+  const torso = new THREE.Mesh(
+    new THREE.BoxGeometry(0.55, 0.78, 0.32),
+    new THREE.MeshStandardMaterial({ color: '#0284c7', roughness: 0.5 })
+  );
+  torso.position.y = 1.15;
+  torso.castShadow = true;
+  group.add(torso);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.24, 14, 14),
+    new THREE.MeshStandardMaterial({ color: '#fcd34d', roughness: 0.4 })
+  );
+  head.position.y = 1.78;
+  group.add(head);
+
+  const legGeo = new THREE.BoxGeometry(0.22, 0.72, 0.24);
+  const legMat = new THREE.MeshStandardMaterial({ color: '#1e293b' });
+  const leftLeg = new THREE.Mesh(legGeo, legMat);
+  leftLeg.position.set(-0.15, 0.38, 0);
+  const rightLeg = new THREE.Mesh(legGeo, legMat);
+  rightLeg.position.set(0.15, 0.38, 0);
+  group.add(leftLeg, rightLeg);
+
+  group.userData.legs = [leftLeg, rightLeg];
+  return group;
+}
+
+function buildChandigarhWorld(THREE, scene) {
+  const worldData = {
+    colliders: [], // { x, z, hw, hd, type, label }
+    roundabouts: [], // { x, z, r }
+    trafficSignals: [], // { x, z, redLightMeshes, greenLightMeshes, yellowLightMeshes, state }
+    streetlights: [],
+    collectibles: [],
+    openHandMesh: null,
+    sukhnaBoats: []
+  };
+
+  // 1. Base Ground Lawn (Chandigarh Green Belt)
+  const groundMat = new THREE.MeshStandardMaterial({ color: '#2d5a27', roughness: 0.92 });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_CONFIG.SIZE + 400, WORLD_CONFIG.SIZE + 400), groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const roadMat = new THREE.MeshStandardMaterial({ color: '#1e293b', roughness: 0.75, metalness: 0.1 });
+  const sidewalkMat = new THREE.MeshStandardMaterial({ color: '#94a3b8', roughness: 0.85 });
+  const lineMat = new THREE.MeshBasicMaterial({ color: '#f8fafc' });
+  const yellowLineMat = new THREE.MeshBasicMaterial({ color: '#facc15' });
+
+  // 2. Grid Roads (X and Z Arterials)
+  WORLD_CONFIG.ROADS_X.forEach((rx) => {
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_CONFIG.ROAD_WIDTH, WORLD_CONFIG.SIZE), roadMat);
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(rx, 0.04, 0);
+    road.receiveShadow = true;
+    scene.add(road);
+
+    // Sidewalks
+    [-1, 1].forEach((side) => {
+      const sw = new THREE.Mesh(
+        new THREE.BoxGeometry(WORLD_CONFIG.SIDEWALK_WIDTH, 0.18, WORLD_CONFIG.SIZE),
+        sidewalkMat
+      );
+      sw.position.set(rx + side * (WORLD_CONFIG.ROAD_WIDTH / 2 + WORLD_CONFIG.SIDEWALK_WIDTH / 2), 0.09, 0);
+      scene.add(sw);
+    });
+
+    // Center median divider line
+    const divLine = new THREE.Mesh(new THREE.PlaneGeometry(0.45, WORLD_CONFIG.SIZE), yellowLineMat);
+    divLine.rotation.x = -Math.PI / 2;
+    divLine.position.set(rx, 0.06, 0);
+    scene.add(divLine);
+  });
+
+  WORLD_CONFIG.ROADS_Z.forEach((rz) => {
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_CONFIG.SIZE, WORLD_CONFIG.ROAD_WIDTH), roadMat);
+    road.rotation.x = -Math.PI / 2;
+    road.position.set(0, 0.05, rz);
+    road.receiveShadow = true;
+    scene.add(road);
+
+    const divLine = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_CONFIG.SIZE, 0.45), yellowLineMat);
+    divLine.rotation.x = -Math.PI / 2;
+    divLine.position.set(0, 0.07, rz);
+    scene.add(divLine);
+  });
+
+  // 3. Iconic Chandigarh Roundabouts (Chowks) & Traffic Signals at all 25 Intersections
+  const poleMat = new THREE.MeshStandardMaterial({ color: '#334155', metalness: 0.6 });
+  const islandMat = new THREE.MeshStandardMaterial({ color: '#15803d', roughness: 0.8 });
+  const curbMat = new THREE.MeshStandardMaterial({ color: '#f1f5f9', roughness: 0.6 });
+
+  WORLD_CONFIG.ROADS_X.forEach((rx, ix) => {
+    WORLD_CONFIG.ROADS_Z.forEach((rz, iz) => {
+      // Roundabout asphalt apron
+      const apron = new THREE.Mesh(new THREE.CircleGeometry(WORLD_CONFIG.ROUNDABOUT_OUTER, 28), roadMat);
+      apron.rotation.x = -Math.PI / 2;
+      apron.position.set(rx, 0.065, rz);
+      scene.add(apron);
+
+      // Landscaped center roundabout island
+      const curb = new THREE.Mesh(
+        new THREE.CylinderGeometry(WORLD_CONFIG.ROUNDABOUT_INNER + 0.8, WORLD_CONFIG.ROUNDABOUT_INNER + 1.0, 0.42, 24),
+        curbMat
+      );
+      curb.position.set(rx, 0.21, rz);
+      scene.add(curb);
+
+      const lawn = new THREE.Mesh(
+        new THREE.CylinderGeometry(WORLD_CONFIG.ROUNDABOUT_INNER, WORLD_CONFIG.ROUNDABOUT_INNER, 0.5, 24),
+        islandMat
+      );
+      lawn.position.set(rx, 0.26, rz);
+      scene.add(lawn);
+
+      // Decorative Matka / Fountain / Sculpture in center of roundabout
+      const statueMat = new THREE.MeshStandardMaterial({
+        color: (ix + iz) % 2 === 0 ? '#f59e0b' : '#38bdf8',
+        roughness: 0.3,
+        metalness: 0.5
+      });
+      const matka = new THREE.Mesh(new THREE.SphereGeometry(2.8, 16, 14), statueMat);
+      matka.position.set(rx, 2.2, rz);
+      matka.castShadow = true;
+      scene.add(matka);
+
+      worldData.roundabouts.push({ x: rx, z: rz, r: WORLD_CONFIG.ROUNDABOUT_INNER + 0.8 });
+      worldData.colliders.push({
+        x: rx,
+        z: rz,
+        hw: WORLD_CONFIG.ROUNDABOUT_INNER - 0.5,
+        hd: WORLD_CONFIG.ROUNDABOUT_INNER - 0.5,
+        type: 'roundabout',
+        label: 'Roundabout Island'
+      });
+
+      // Traffic signal poles at intersection corners
+      const sigGroup = new THREE.Group();
+      sigGroup.position.set(rx + 16, 0, rz + 16);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 6.2, 8), poleMat);
+      pole.position.y = 3.1;
+      sigGroup.add(pole);
+
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.8, 0.75), new THREE.MeshStandardMaterial({ color: '#0f172a' }));
+      box.position.y = 5.6;
+      sigGroup.add(box);
+
+      const redMat = new THREE.MeshBasicMaterial({ color: '#ef4444' });
+      const yellowMat = new THREE.MeshBasicMaterial({ color: '#422006' });
+      const greenMat = new THREE.MeshBasicMaterial({ color: '#052e16' });
+
+      const redBulb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), redMat);
+      redBulb.position.set(0, 6.1, 0.38);
+      const yellowBulb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), yellowMat);
+      yellowBulb.position.set(0, 5.6, 0.38);
+      const greenBulb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), greenMat);
+      greenBulb.position.set(0, 5.1, 0.38);
+      sigGroup.add(redBulb, yellowBulb, greenBulb);
+      scene.add(sigGroup);
+
+      worldData.trafficSignals.push({
+        x: rx,
+        z: rz,
+        redMat,
+        yellowMat,
+        greenMat,
+        state: 'NS_GREEN',
+        phaseOffset: (ix * 3 + iz * 5) % 12
+      });
+    });
+  });
+
+  // 4. Construct the 12 Authentic Chandigarh Landmarks
+  const brutalistConcrete = new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.78 });
+  const redSandstone = new THREE.MeshStandardMaterial({ color: '#b45309', roughness: 0.72 });
+  const glassFacade = new THREE.MeshStandardMaterial({ color: '#0284c7', roughness: 0.2, metalness: 0.75 });
+
+  // (A) Sector 17 Plaza (-140, -140)
+  {
+    const cx = -140, cz = -140;
+    const plazaFloor = new THREE.Mesh(new THREE.BoxGeometry(150, 0.25, 150), new THREE.MeshStandardMaterial({ color: '#94a3b8' }));
+    plazaFloor.position.set(cx, 0.12, cz);
+    plazaFloor.receiveShadow = true;
+    scene.add(plazaFloor);
+
+    // Musical Fountain in center
+    const fountainPool = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 0.9, 24), new THREE.MeshStandardMaterial({ color: '#0ea5e9' }));
+    fountainPool.position.set(cx, 0.5, cz);
+    scene.add(fountainPool);
+    const jet = new THREE.Mesh(new THREE.ConeGeometry(3.5, 9, 16), new THREE.MeshBasicMaterial({ color: '#e0f2fe', wireframe: true }));
+    jet.position.set(cx, 5.0, cz);
+    scene.add(jet);
+
+    // 4 Brutalist Shopping Blocks around the Plaza
+    [
+      [cx - 48, cz - 42, 34, 18, 22],
+      [cx + 48, cz - 42, 34, 18, 22],
+      [cx - 48, cz + 42, 34, 16, 22],
+      [cx + 48, cz + 42, 34, 22, 22]
+    ].forEach(([bx, bz, bw, bh, bd]) => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), brutalistConcrete);
+      b.position.set(bx, bh / 2, bz);
+      b.castShadow = true;
+      b.receiveShadow = true;
+      scene.add(b);
+      worldData.colliders.push({ x: bx, z: bz, hw: bw / 2, hd: bd / 2, type: 'building', label: 'Sector 17 Arcade' });
+    });
+  }
+
+  // (B) Capitol Complex & Open Hand Monument (-140, -700)
+  {
+    const cx = -140, cz = -690;
+    // Secretariat Slab
+    const sec = new THREE.Mesh(new THREE.BoxGeometry(75, 42, 18), brutalistConcrete);
+    sec.position.set(cx - 45, 21, cz - 25);
+    sec.castShadow = true;
+    scene.add(sec);
+    worldData.colliders.push({ x: cx - 45, z: cz - 25, hw: 37.5, hd: 9, type: 'building', label: 'Secretariat' });
+
+    // Open Hand Monument (rotating sculpture)
+    const handGroup = new THREE.Group();
+    handGroup.position.set(cx + 25, 0, cz);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 18, 12), brutalistConcrete);
+    shaft.position.y = 9;
+    handGroup.add(shaft);
+
+    const palm = new THREE.Mesh(
+      new THREE.BoxGeometry(14, 11, 1.6),
+      new THREE.MeshStandardMaterial({ color: '#10b981', roughness: 0.35, metalness: 0.45 })
+    );
+    palm.position.y = 20;
+    handGroup.add(palm);
+
+    const thumb = new THREE.Mesh(
+      new THREE.BoxGeometry(4, 6, 1.6),
+      new THREE.MeshStandardMaterial({ color: '#10b981', roughness: 0.35, metalness: 0.45 })
+    );
+    thumb.position.set(8.5, 19, 0);
+    handGroup.add(thumb);
+
+    scene.add(handGroup);
+    worldData.openHandMesh = handGroup;
+    worldData.colliders.push({ x: cx + 25, z: cz, hw: 4, hd: 4, type: 'monument', label: 'Open Hand Monument' });
+  }
+
+  // (C) Rock Garden (140, -700)
+  {
+    const cx = 140, cz = -685;
+    for (let i = 0; i < 14; i++) {
+      const angle = (i / 14) * Math.PI * 2;
+      const rx = cx + Math.cos(angle) * 38;
+      const rz = cz + Math.sin(angle) * 38;
+      const arch = new THREE.Mesh(new THREE.TorusGeometry(6, 1.5, 10, 18, Math.PI), redSandstone);
+      arch.position.set(rx, 0, rz);
+      arch.rotation.y = angle;
+      scene.add(arch);
+    }
+  }
+
+  // (D) Sukhna Lake (420, -420)
+  {
+    const cx = 420, cz = -420;
+    const lakeWater = new THREE.Mesh(
+      new THREE.BoxGeometry(195, 0.35, 195),
+      new THREE.MeshStandardMaterial({ color: '#0284c7', roughness: 0.12, metalness: 0.65 })
+    );
+    lakeWater.position.set(cx, 0.18, cz);
+    scene.add(lakeWater);
+
+    // Floating Shikara Boats
+    for (let i = 0; i < 5; i++) {
+      const boat = new THREE.Mesh(
+        new THREE.BoxGeometry(4.2, 1.2, 8.5),
+        new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? '#f59e0b' : '#ec4899' })
+      );
+      boat.position.set(cx - 50 + i * 25, 0.7, cz - 30 + (i % 2) * 40);
+      scene.add(boat);
+      worldData.sukhnaBoats.push({ mesh: boat, baseZ: boat.position.z, phase: i * 1.4 });
+    }
+  }
+
+  // (E) Zakir Hussain Rose Garden (-420, -140)
+  {
+    const cx = -420, cz = -140;
+    const roseColors = ['#e11d48', '#f43f5e', '#fb7185', '#facc15', '#c026d3'];
+    for (let gx = -3; gx <= 3; gx++) {
+      for (let gz = -3; gz <= 3; gz++) {
+        if (gx === 0 && gz === 0) continue;
+        const bed = new THREE.Mesh(
+          new THREE.CylinderGeometry(6.5, 7, 0.8, 12),
+          new THREE.MeshStandardMaterial({ color: roseColors[Math.abs(gx + gz) % roseColors.length] })
+        );
+        bed.position.set(cx + gx * 22, 0.4, cz + gz * 22);
+        scene.add(bed);
+      }
+    }
+  }
+
+  // (F) Panjab University & Gandhi Bhawan (-420, -420)
+  {
+    const cx = -420, cz = -420;
+    const pool = new THREE.Mesh(new THREE.BoxGeometry(56, 0.3, 56), new THREE.MeshStandardMaterial({ color: '#38bdf8' }));
+    pool.position.set(cx, 0.15, cz);
+    scene.add(pool);
+
+    const bhawan = new THREE.Mesh(
+      new THREE.ConeGeometry(18, 22, 4),
+      new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.4 })
+    );
+    bhawan.position.set(cx, 11, cz);
+    bhawan.castShadow = true;
+    scene.add(bhawan);
+    worldData.colliders.push({ x: cx, z: cz, hw: 14, hd: 14, type: 'building', label: 'Gandhi Bhawan PU' });
+  }
+
+  // (G) Elante Mall (420, 140)
+  {
+    const cx = 420, cz = 140;
+    const mallMain = new THREE.Mesh(new THREE.BoxGeometry(92, 34, 68), glassFacade);
+    mallMain.position.set(cx, 17, cz);
+    mallMain.castShadow = true;
+    scene.add(mallMain);
+    worldData.colliders.push({ x: cx, z: cz, hw: 46, hd: 34, type: 'building', label: 'Elante Mall' });
+  }
+
+  // (H) ISBT 17 (-140, 140), ISBT 43 (-420, 420), Railway Station (420, 420), Airport (140, 680)
+  [
+    { x: -140, z: 140, w: 72, h: 16, d: 36, color: '#1d4ed8', label: 'ISBT Sector 17' },
+    { x: -420, z: 420, w: 78, h: 18, d: 40, color: '#4338ca', label: 'ISBT Sector 43' },
+    { x: 420, z: 420, w: 88, h: 20, d: 34, color: '#b45309', label: 'Chandigarh Railway Station' },
+    { x: 140, z: 685, w: 110, h: 24, d: 44, color: '#0f766e', label: 'Airport Terminal' }
+  ].forEach((b) => {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(b.w, b.h, b.d),
+      new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.5 })
+    );
+    mesh.position.set(b.x, b.h / 2, b.z);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    worldData.colliders.push({ x: b.x, z: b.z, hw: b.w / 2, hd: b.d / 2, type: 'building', label: b.label });
+  });
+
+  // 5. Fill Residential Sectors, Kothis, Markets & Boulevard Trees
+  const sectorCenters = [-420, -140, 140, 420];
+  const kothiColors = ['#e2e8f0', '#fed7aa', '#fde68a', '#cbd5e1', '#fca5a5'];
+  const trunkMat = new THREE.MeshStandardMaterial({ color: '#78350f' });
+  const foliageMat = new THREE.MeshStandardMaterial({ color: '#15803d', roughness: 0.85 });
+
+  sectorCenters.forEach((sx) => {
+    sectorCenters.forEach((sz) => {
+      // Skip specialized full-sector parks/lakes
+      if ((sx === 420 && sz === -420) || (sx === -420 && sz === -140) || (sx === -140 && sz === -140)) return;
+
+      // Add 4 residential kothi / apartment blocks per sector quadrant
+      [
+        [-58, -58],
+        [58, -58],
+        [-58, 58],
+        [58, 58]
+      ].forEach(([ox, oz], idx) => {
+        const bx = sx + ox;
+        const bz = sz + oz;
+        // Ensure not overlapping existing landmark collider
+        const exists = worldData.colliders.some((c) => Math.hypot(c.x - bx, c.z - bz) < 48);
+        if (exists) return;
+
+        const bw = 26 + (idx % 2) * 8;
+        const bh = 11 + (( Math.abs(sx + sz) + idx) % 3) * 6;
+        const bd = 24;
+        const house = new THREE.Mesh(
+          new THREE.BoxGeometry(bw, bh, bd),
+          new THREE.MeshStandardMaterial({ color: kothiColors[(idx + Math.abs(sx)) % kothiColors.length], roughness: 0.75 })
+        );
+        house.position.set(bx, bh / 2, bz);
+        house.castShadow = true;
+        house.receiveShadow = true;
+        scene.add(house);
+        worldData.colliders.push({ x: bx, z: bz, hw: bw / 2, hd: bd / 2, type: 'building', label: 'Sector Kothi' });
+      });
+    });
+  });
+
+  // Avenue Trees along boulevards
+  for (let i = -680; i <= 680; i += 85) {
+    WORLD_CONFIG.ROADS_X.forEach((rx) => {
+      if (WORLD_CONFIG.ROADS_Z.some((rz) => Math.abs(i - rz) < 38)) return;
+      [-21, 21].forEach((offset) => {
+        const tree = new THREE.Group();
+        tree.position.set(rx + offset, 0, i);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.65, 3.8, 7), trunkMat);
+        trunk.position.y = 1.9;
+        const crown = new THREE.Mesh(new THREE.DodecahedronGeometry(3.4, 1), foliageMat);
+        crown.position.y = 5.2;
+        crown.castShadow = true;
+        tree.add(trunk, crown);
+        scene.add(tree);
+      });
+    });
+  }
+
+  // 6. Petrol Pumps, Garages & Safehouses
+  SERVICE_STATIONS.forEach((st) => {
+    const color = st.type === 'fuel' ? '#f97316' : st.type === 'garage' ? '#a855f7' : '#22c55e';
+    const canopy = new THREE.Mesh(
+      new THREE.BoxGeometry(16, 0.8, 12),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.4 })
+    );
+    canopy.position.set(st.x, 5.4, st.z);
+    scene.add(canopy);
+
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(4.5, 5.8, 24),
+      new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(st.x, 0.12, st.z);
+    scene.add(ring);
+  });
+
+  // 7. 20 Collectible Open Hand Gold Trophies scattered across Chandigarh
+  const trophyMat = new THREE.MeshStandardMaterial({
+    color: '#facc15',
+    emissive: '#ca8a04',
+    emissiveIntensity: 0.5,
+    metalness: 0.85,
+    roughness: 0.2
+  });
+
+  for (let i = 0; i < WORLD_CONFIG.COLLECTIBLE_COUNT; i++) {
+    const angle = (i / WORLD_CONFIG.COLLECTIBLE_COUNT) * Math.PI * 2;
+    const dist = 120 + (i % 5) * 125;
+    const tx = Math.round(Math.cos(angle) * dist);
+    const tz = Math.round(Math.sin(angle) * dist);
+    const trophy = new THREE.Mesh(new THREE.OctahedronGeometry(1.6, 0), trophyMat);
+    trophy.position.set(tx, 2.2, tz);
+    scene.add(trophy);
+    worldData.collectibles.push({ id: `trophy_${i + 1}`, mesh: trophy, x: tx, z: tz, collected: false });
+  }
+
+  return worldData;
+}
+
+// ============================================================================
+// MODULE 4: GAMEPLAY ENGINE — DRIVING PHYSICS, AI TRAFFIC, POLICE & MISSIONS
+// ============================================================================
+
+
+
+class TrafficAndPoliceManager {
+  constructor(THREE, scene, worldData, soundEngine) {
+    this.THREE = THREE;
+    this.scene = scene;
+    this.worldData = worldData;
+    this.sound = soundEngine;
+    this.aiVehicles = [];
+    this.policeUnits = [];
+    this.pedestrians = [];
+    this.roadblocks = [];
+    this.signalTimer = 0;
+
+    // Wanted system state
+    this.wantedLevel = 0;
+    this.wantedHeat = 0;
+    this.cooldownTimer = 0;
+    this.lineOfSight = false;
+    this.lastSeenPos = { x: 0, z: 0 };
+    this.violationCooldown = 0;
+    this.finePending = 0;
+  }
+
+  initTraffic(count = 32) {
+    const types = ['hatchback', 'sedan', 'suv', 'autorickshaw', 'bike', 'bus', 'sports'];
+    const palette = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#f8fafc', '#6366f1', '#ec4899', '#14b8a6'];
+
+    for (let i = 0; i < count; i++) {
+      const type = types[i % types.length];
+      const color = type === 'autorickshaw' ? '#16a34a' : type === 'bus' ? '#dc2626' : palette[i % palette.length];
+      const mesh = buildVehicleMesh(this.THREE, type, color);
+      const axis = i % 2 === 0 ? 'X' : 'Z';
+      const dir = i % 4 < 2 ? 1 : -1;
+      const laneOffset = dir * 6.2; // Left-hand Indian traffic drive lane
+
+      let x = 0, z = 0, angle = 0;
+      if (axis === 'X') {
+        const roadZ = WORLD_CONFIG.ROADS_Z[i % WORLD_CONFIG.ROADS_Z.length];
+        z = roadZ + laneOffset;
+        x = -620 + (i * 43) % 1240;
+        angle = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+      } else {
+        const roadX = WORLD_CONFIG.ROADS_X[i % WORLD_CONFIG.ROADS_X.length];
+        x = roadX - laneOffset;
+        z = -620 + (i * 47) % 1240;
+        angle = dir > 0 ? 0 : Math.PI;
+      }
+
+      mesh.position.set(x, 0, z);
+      mesh.rotation.y = angle;
+      this.scene.add(mesh);
+
+      const spec = VEHICLE_CATALOG[type];
+      this.aiVehicles.push({
+        id: `ai_${i}`,
+        type,
+        mesh,
+        x,
+        z,
+        angle,
+        axis,
+        dir,
+        speed: spec.maxSpeed * 0.45,
+        targetSpeed: spec.maxSpeed * 0.48,
+        spec,
+        honkTimer: 2 + Math.random() * 8
+      });
+    }
+
+    // Spawn Sidewalk Pedestrians
+    const shirtColors = ['#f97316', '#06b6d4', '#8b5cf6', '#ec4899', '#eab308', '#22c55e'];
+    for (let p = 0; p < 36; p++) {
+      const pedGroup = new this.THREE.Group();
+      const body = new this.THREE.Mesh(
+        new this.THREE.BoxGeometry(0.45, 0.75, 0.28),
+        new this.THREE.MeshStandardMaterial({ color: shirtColors[p % shirtColors.length] })
+      );
+      body.position.y = 1.05;
+      const head = new this.THREE.Mesh(
+        new this.THREE.SphereGeometry(0.2, 10, 10),
+        new this.THREE.MeshStandardMaterial({ color: '#fde68a' })
+      );
+      head.position.y = 1.62;
+      pedGroup.add(body, head);
+
+      const rx = WORLD_CONFIG.ROADS_X[p % WORLD_CONFIG.ROADS_X.length] + (p % 2 === 0 ? 15.2 : -15.2);
+      const rz = -550 + (p * 33) % 1100;
+      pedGroup.position.set(rx, 0, rz);
+      this.scene.add(pedGroup);
+      this.pedestrians.push({
+        mesh: pedGroup,
+        x: rx,
+        z: rz,
+        dir: p % 2 === 0 ? 1 : -1,
+        speed: 2.2 + (p % 3) * 0.45
+      });
+    }
+  }
+
+  updateTrafficSignals(dt) {
+    this.signalTimer += dt;
+    this.worldData.trafficSignals.forEach((sig) => {
+      const cycle = (this.signalTimer + sig.phaseOffset) % 16;
+      if (cycle < 7) {
+        sig.state = 'NS_GREEN';
+        sig.greenMat.color.setHex(0x22c55e);
+        sig.yellowMat.color.setHex(0x422006);
+        sig.redMat.color.setHex(0x450a0a);
+      } else if (cycle < 8.5) {
+        sig.state = 'YELLOW';
+        sig.greenMat.color.setHex(0x052e16);
+        sig.yellowMat.color.setHex(0xfacc15);
+        sig.redMat.color.setHex(0x450a0a);
+      } else {
+        sig.state = 'EW_GREEN';
+        sig.greenMat.color.setHex(0x052e16);
+        sig.yellowMat.color.setHex(0x422006);
+        sig.redMat.color.setHex(0xef4444);
+      }
+    });
+  }
+
+  getNearestSignal(x, z) {
+    let best = null;
+    let bestDist = 9999;
+    for (const sig of this.worldData.trafficSignals) {
+      const d = Math.hypot(sig.x - x, sig.z - z);
+      if (d < bestDist) {
+        bestDist = d;
+        best = sig;
+      }
+    }
+    return { signal: best, dist: bestDist };
+  }
+
+  reportViolation(reason, heatAmount, fineAmount, onNotify) {
+    if (this.violationCooldown > 0) return;
+    this.violationCooldown = 2.6;
+    this.wantedHeat += heatAmount;
+    this.finePending += fineAmount;
+
+    const prevLevel = this.wantedLevel;
+    if (this.wantedHeat >= 100) this.wantedLevel = 5;
+    else if (this.wantedHeat >= 72) this.wantedLevel = 4;
+    else if (this.wantedHeat >= 48) this.wantedLevel = 3;
+    else if (this.wantedHeat >= 24) this.wantedLevel = 2;
+    else if (this.wantedHeat >= 8) this.wantedLevel = 1;
+
+    this.cooldownTimer = 14 + this.wantedLevel * 6;
+    if (onNotify) {
+      onNotify(`🚨 Traffic/Law Violation: ${reason} (+₹${fineAmount} Challan)`, 'warn');
+    }
+    if (this.wantedLevel > prevLevel && this.wantedLevel >= 2) {
+      this.syncPoliceUnits();
+    }
+  }
+
+  setWantedLevelDirect(level) {
+    this.wantedLevel = Math.max(0, Math.min(5, level));
+    const heatMap = [0, 12, 30, 54, 78, 105];
+    this.wantedHeat = heatMap[this.wantedLevel];
+    this.cooldownTimer = this.wantedLevel > 0 ? 16 + this.wantedLevel * 5 : 0;
+    if (this.wantedLevel === 0) {
+      this.finePending = 0;
+      this.lineOfSight = false;
+    }
+    this.syncPoliceUnits();
+  }
+
+  syncPoliceUnits() {
+    const desiredCount =
+      this.wantedLevel <= 1 ? 1 : this.wantedLevel === 2 ? 2 : this.wantedLevel === 3 ? 4 : this.wantedLevel === 4 ? 6 : 8;
+
+    while (this.policeUnits.length < desiredCount) {
+      const idx = this.policeUnits.length;
+      const mesh = buildVehicleMesh(this.THREE, 'police', '#ffffff', '#94a3b8', true);
+      const angle = (idx / desiredCount) * Math.PI * 2;
+      const spawnDist = 95 + idx * 18;
+      const px = Math.max(-720, Math.min(720, this.lastSeenPos.x + Math.cos(angle) * spawnDist));
+      const pz = Math.max(-720, Math.min(720, this.lastSeenPos.z + Math.sin(angle) * spawnDist));
+      mesh.position.set(px, 0, pz);
+      this.scene.add(mesh);
+
+      this.policeUnits.push({
+        mesh,
+        x: px,
+        z: pz,
+        angle: 0,
+        speed: 0,
+        mode: idx >= 3 && this.wantedLevel >= 3 ? 'intercept' : 'chase'
+      });
+    }
+
+    while (this.policeUnits.length > desiredCount) {
+      const removed = this.policeUnits.pop();
+      this.scene.remove(removed.mesh);
+    }
+  }
+
+  update(dt, playerState, onNotify, onMissionViolation) {
+    this.updateTrafficSignals(dt);
+    if (this.violationCooldown > 0) this.violationCooldown -= dt;
+
+    // 1. Update AI Civilian Vehicles
+    for (const ai of this.aiVehicles) {
+      let shouldStop = false;
+
+      // Check traffic light ahead
+      const { signal, dist } = this.getNearestSignal(ai.x, ai.z);
+      if (signal && dist > 18 && dist < 34) {
+        if (ai.axis === 'Z' && signal.state !== 'NS_GREEN') shouldStop = true;
+        if (ai.axis === 'X' && signal.state !== 'EW_GREEN') shouldStop = true;
+      }
+
+      // Check distance to player to avoid rear-ending or honk
+      const distToPlayer = Math.hypot(playerState.x - ai.x, playerState.z - ai.z);
+      if (distToPlayer < 13) {
+        shouldStop = true;
+        ai.honkTimer -= dt;
+        if (ai.honkTimer <= 0) {
+          this.sound.playHorn(ai.type);
+          ai.honkTimer = 4 + Math.random() * 5;
+        }
+      }
+
+      const target = shouldStop ? 0 : ai.targetSpeed;
+      ai.speed += (target - ai.speed) * Math.min(1, dt * 4.5);
+
+      // Move around roundabout smoothly or along lane
+      if (ai.axis === 'X') {
+        ai.x += ai.dir * ai.speed * dt;
+        if (ai.x > 740) ai.x = -740;
+        if (ai.x < -740) ai.x = 740;
+      } else {
+        ai.z += ai.dir * ai.speed * dt;
+        if (ai.z > 740) ai.z = -740;
+        if (ai.z < -740) ai.z = 740;
+      }
+
+      ai.mesh.position.set(ai.x, 0, ai.z);
+    }
+
+    // 2. Update Pedestrians
+    for (const ped of this.pedestrians) {
+      ped.z += ped.dir * ped.speed * dt;
+      if (ped.z > 680) ped.dir = -1;
+      if (ped.z < -680) ped.dir = 1;
+      ped.mesh.position.set(ped.x, 0, ped.z);
+      ped.mesh.rotation.y = ped.dir > 0 ? 0 : Math.PI;
+    }
+
+    // 3. Check Player Traffic Rule Violations (Red Light & Speeding)
+    if (playerState.inVehicle) {
+      const speedKmh = Math.abs(playerState.speed) * 2.2;
+      const { signal, dist } = this.getNearestSignal(playerState.x, playerState.z);
+
+      if (signal && dist < 17 && speedKmh > 25) {
+        const movingNS = Math.abs(Math.cos(playerState.angle)) > 0.7;
+        const ranRed =
+          (movingNS && signal.state === 'EW_GREEN') || (!movingNS && signal.state === 'NS_GREEN');
+        if (ranRed && this.violationCooldown <= 0) {
+          this.reportViolation('Ran Red Signal at Chowk CCTV', 16, 1000, onNotify);
+          if (onMissionViolation) onMissionViolation('redLight');
+        }
+      }
+
+      if (speedKmh > 112 && this.violationCooldown <= 0) {
+        this.reportViolation('Excessive Speeding over 110 km/h', 10, 500, onNotify);
+      }
+    }
+
+    // 4. Police Wanted Level AI & Line-of-Sight Pursuit
+    if (this.wantedLevel > 0) {
+      let spotted = false;
+      const flash = Math.floor( performance.now() / 160 ) % 2 === 0;
+
+      for (const cop of this.policeUnits) {
+        // Flash roof beacons
+        if (cop.mesh.userData.beacon) {
+          cop.mesh.userData.beacon.redBeacon.material.color.setHex(flash ? 0xef4444 : 0x450a0a);
+          cop.mesh.userData.beacon.blueBeacon.material.color.setHex(flash ? 0x1e3a8a : 0x3b82f6);
+        }
+
+        const dx = playerState.x - cop.x;
+        const dz = playerState.z - cop.z;
+        const dist = Math.hypot(dx, dz);
+
+        if (dist < 135) {
+          spotted = true;
+          this.lastSeenPos.x = playerState.x;
+          this.lastSeenPos.z = playerState.z;
+        }
+
+        if (this.wantedLevel >= 2) {
+          // Aim toward last seen position or intercept point ahead of player
+          const aimX =
+            cop.mode === 'intercept'
+              ? this.lastSeenPos.x + Math.sin(playerState.angle) * 28
+              : this.lastSeenPos.x;
+          const aimZ =
+            cop.mode === 'intercept'
+              ? this.lastSeenPos.z + Math.cos(playerState.angle) * 28
+              : this.lastSeenPos.z;
+
+          const targetAngle = Math.atan2(aimX - cop.x, aimZ - cop.z);
+          let diff = targetAngle - cop.angle;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+
+          cop.angle += diff * Math.min(1, dt * 3.8);
+          const maxCopSpeed = 36 + this.wantedLevel * 4.5;
+          cop.speed = Math.min(maxCopSpeed, cop.speed + 28 * dt);
+
+          cop.x += Math.sin(cop.angle) * cop.speed * dt;
+          cop.z += Math.cos(cop.angle) * cop.speed * dt;
+          cop.mesh.position.set(cop.x, 0, cop.z);
+          cop.mesh.rotation.y = cop.angle;
+
+          // Police ramming player
+          if (dist < 3.6) {
+            playerState.speed *= 0.65;
+            if (playerState.inVehicle && playerState.currentVehicle) {
+              playerState.currentVehicle.damage = Math.min(100, playerState.currentVehicle.damage + 12 * dt);
+            } else {
+              playerState.health = Math.max(0, playerState.health - 20 * dt);
+            }
+          }
+        }
+      }
+
+      this.lineOfSight = spotted;
+      if (spotted) {
+        this.cooldownTimer = 12 + this.wantedLevel * 5;
+      } else {
+        this.cooldownTimer -= dt;
+        if (this.cooldownTimer <= 0) {
+          this.wantedLevel = Math.max(0, this.wantedLevel - 1);
+          if (this.wantedLevel === 0) {
+            this.wantedHeat = 0;
+            this.syncPoliceUnits();
+            if (onNotify) onNotify('✅ Evaded Chandigarh Police! Wanted Level Cleared.', 'success');
+          } else {
+            this.cooldownTimer = 10 + this.wantedLevel * 4;
+            this.syncPoliceUnits();
+          }
+        }
+      }
+    }
+  }
+}
+
+// ============================================================================
+// MODULE 5: MAIN GAME CONTROLLER, UI, MINIMAP, CHEATS & REACT/DOM SHELL
+// ============================================================================
+
+
+
+
+
+function bootGTAChandigarh() {
+  const THREE = window.THREE;
+  if (!THREE) {
+    console.error('Three.js not loaded');
+    return;
+  }
+
+  const saveState = loadGameState();
+  const sound = new SoundEngine();
+  sound.setVolume(saveState.settings.volume ?? 0.65);
+
+  // Scene, Camera & Renderer
+  const canvasContainer = document.getElementById('game-viewport');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#38bdf8');
+  scene.fog = new THREE.FogExp2('#38bdf8', 0.0014);
+
+  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.4, 950);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  canvasContainer.innerHTML = '';
+  canvasContainer.appendChild(renderer.domElement);
+
+  // Lighting (Sun + Ambient + Hemisphere)
+  const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x1e293b, 0.72);
+  scene.add(hemiLight);
+
+  const sunLight = new THREE.DirectionalLight(0xfffbeb, 1.15);
+  sunLight.position.set(220, 340, 180);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 2048;
+  sunLight.shadow.mapSize.height = 2048;
+  sunLight.shadow.camera.near = 10;
+  sunLight.shadow.camera.far = 900;
+  const d = 260;
+  sunLight.shadow.camera.left = -d;
+  sunLight.shadow.camera.right = d;
+  sunLight.shadow.camera.top = d;
+  sunLight.shadow.camera.bottom = -d;
+  scene.add(sunLight);
+
+  // Build 3D Chandigarh Map
+  const worldData = buildChandigarhWorld(THREE, scene);
+
+  // Mark already collected trophies
+  worldData.collectibles.forEach((t) => {
+    if (saveState.collectedTrophies.includes(t.id)) {
+      t.collected = true;
+      t.mesh.visible = false;
+    }
+  });
+
+  // Rain Particle System
+  const rainCount = 1200;
+  const rainGeo = new THREE.BufferGeometry();
+  const rainPositions = new Float32Array(rainCount * 3);
+  for (let i = 0; i < rainCount * 3; i += 3) {
+    rainPositions[i] = (Math.random() - 0.5) * 180;
+    rainPositions[i + 1] = Math.random() * 65;
+    rainPositions[i + 2] = (Math.random() - 0.5) * 180;
+  }
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+  const rainMat = new THREE.PointsMaterial({ color: 0xbae6fd, size: 0.35, transparent: true, opacity: 0.65 });
+  const rainSystem = new THREE.Points(rainGeo, rainMat);
+  rainSystem.visible = false;
+  scene.add(rainSystem);
+
+  // Mission Destination 3D Glowing Cylinder Beacon
+  const beaconGeo = new THREE.CylinderGeometry(4.5, 4.5, 45, 24, 1, true);
+  const beaconMat = new THREE.MeshBasicMaterial({
+    color: 0xfacc15,
+    transparent: true,
+    opacity: 0.38,
+    side: THREE.DoubleSide
+  });
+  const missionBeacon = new THREE.Mesh(beaconGeo, beaconMat);
+  missionBeacon.visible = false;
+  scene.add(missionBeacon);
+
+  // Mission Start Markers in 3D World
+  const missionStartMeshes = [];
+  const startRingGeo = new THREE.CylinderGeometry(3.5, 3.5, 1.5, 20, 1, true);
+  const startRingMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+  CORE_MISSIONS.forEach((m) => {
+    const firstStage = m.stages[0];
+    const ring = new THREE.Mesh(startRingGeo, startRingMat);
+    ring.position.set(firstStage.x, 0.8, firstStage.z);
+    scene.add(ring);
+    missionStartMeshes.push({ mission: m, mesh: ring, x: firstStage.x, z: firstStage.z });
+  });
+
+  // Player & Vehicle State
+  const playerMesh = buildPlayerCharacterMesh(THREE);
+  scene.add(playerMesh);
+
+  const parkedVehicles = [];
+  function spawnWorldVehicle(typeId, x, z, angle = 0, customColor = null) {
+    const cust = saveState.vehicleCustomizations[typeId] || {};
+    const color = customColor || cust.color || VEHICLE_CATALOG[typeId].defaultColor;
+    const wheelColor = cust.wheelColor || '#cbd5e1';
+    const mesh = buildVehicleMesh(THREE, typeId, color, wheelColor, typeId === 'police');
+    mesh.position.set(x, 0, z);
+    mesh.rotation.y = angle;
+    scene.add(mesh);
+
+    const spec = VEHICLE_CATALOG[typeId];
+    const vObj = {
+      type: typeId,
+      spec,
+      mesh,
+      x,
+      z,
+      angle,
+      speed: 0,
+      damage: 0,
+      fuel: 100,
+      nos: 100,
+      headlightsOn: false
+    };
+    parkedVehicles.push(vObj);
+    return vObj;
+  }
+
+  // Spawn Player's Initial Selected Vehicle at Sector 17 / Sector 22
+  const initialCar = spawnWorldVehicle(saveState.selectedVehicle || 'hatchback', -140, -75, 0);
+  // Spawn extra signature vehicles near landmarks so player can switch anytime
+  spawnWorldVehicle('autorickshaw', -122, -75, 0.4);
+  spawnWorldVehicle('suv', -156, -75, -0.3);
+  spawnWorldVehicle('bike', -132, -62, 1.2);
+  spawnWorldVehicle('sports', 385, 120, 0);
+  spawnWorldVehicle('bus', -120, 115, 0);
+  spawnWorldVehicle('police', -110, -260, 0);
+  spawnWorldVehicle('ambulance', -320, -180, 0);
+
+  const playerState = {
+    x: initialCar.x,
+    z: initialCar.z,
+    y: 0,
+    vy: 0,
+    angle: 0,
+    speed: 0,
+    inVehicle: true,
+    currentVehicle: initialCar,
+    health: saveState.health || 100,
+    cameraMode: 0, // 0: Chase, 1: Far Chase, 2: Cockpit, 3: Top-Down
+    superJump: false,
+    slowMo: false,
+    nosActive: false,
+    waypoint: null
+  };
+  playerMesh.visible = false;
+
+  // Traffic & Police Manager
+  const trafficPolice = new TrafficAndPoliceManager(THREE, scene, worldData, sound);
+  trafficPolice.initTraffic(32);
+
+  // Weather & Time of Day State
+  const envState = {
+    timeHours: 10.5, // 0..24
+    weather: 'sunny', // 'sunny', 'cloudy', 'rain', 'fog', 'sunset', 'night'
+    autoCycle: true
+  };
+
+  // Active Mission State
+  let activeMission = null;
+  let missionStageIdx = 0;
+  let missionTimer = 0;
+  let missionStartDamage = 0;
+  let missionUsedCheats = false;
+  let taxiFareActive = null;
+
+  // Keyboard & Touch Input State
+  const keys = {};
+  let gamePaused = false;
+  let gameStarted = false;
+
+  // Notification Toast Queue
+  function showToast(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const el = document.createElement('div');
+    const bg =
+      type === 'success'
+        ? 'bg-emerald-900/95 border-emerald-400 text-emerald-100'
+        : type === 'warn'
+        ? 'bg-rose-950/95 border-rose-500 text-rose-100'
+        : 'bg-slate-900/95 border-amber-400 text-amber-100';
+    el.className = `px-4 py-2.5 rounded-lg border-l-4 shadow-xl text-xs font-semibold tracking-wide transition-all duration-300 ${bg}`;
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(() => {
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 300);
+    }, 3600);
+  }
+
+  // Apply Weather & Time-of-Day Visuals
+  function applyEnvironmentVisuals(dt) {
+    if (envState.autoCycle && !gamePaused) {
+      envState.timeHours = (envState.timeHours + dt * 0.04) % 24;
+    }
+    const h = envState.timeHours;
+    const isNight = h < 6 || h >= 19.5 || envState.weather === 'night';
+    const isSunset = (h >= 17.2 && h < 19.5) || envState.weather === 'sunset';
+
+    let skyHex = '#38bdf8';
+    let fogDensity = 0.0013;
+    let sunIntensity = 1.15;
+
+    if (envState.weather === 'rain') {
+      skyHex = '#334155';
+      fogDensity = 0.0032;
+      sunIntensity = 0.55;
+      rainSystem.visible = true;
+    } else if (envState.weather === 'fog') {
+      skyHex = '#94a3b8';
+      fogDensity = 0.0065;
+      sunIntensity = 0.5;
+      rainSystem.visible = false;
+    } else if (isNight) {
+      skyHex = '#090d16';
+      fogDensity = 0.0022;
+      sunIntensity = 0.18;
+      rainSystem.visible = false;
+    } else if (isSunset) {
+      skyHex = '#ea580c';
+      fogDensity = 0.0018;
+      sunIntensity = 0.78;
+      rainSystem.visible = false;
+    } else if (envState.weather === 'cloudy') {
+      skyHex = '#64748b';
+      fogDensity = 0.0022;
+      sunIntensity = 0.72;
+      rainSystem.visible = false;
+    } else {
+      skyHex = '#38bdf8';
+      fogDensity = 0.0012;
+      sunIntensity = 1.18;
+      rainSystem.visible = false;
+    }
+
+    scene.background.set(skyHex);
+    scene.fog.color.set(skyHex);
+    scene.fog.density = fogDensity;
+    sunLight.intensity = sunIntensity;
+    hemiLight.intensity = isNight ? 0.28 : 0.72;
+
+    // Animate Rain Particles around player
+    if (rainSystem.visible) {
+      rainSystem.position.set(playerState.x, 0, playerState.z);
+      const pos = rainGeo.attributes.position.array;
+      for (let i = 1; i < pos.length; i += 3) {
+        pos[i] -= 42 * dt;
+        if (pos[i] < 0) pos[i] = 62;
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+    }
+  }
+
+  // Mission System Execution
+  function startMission(missionId) {
+    const m = ALL_MISSIONS.find((item) => item.id === missionId);
+    if (!m) return;
+
+    activeMission = m;
+    missionStageIdx = 0;
+    missionTimer = m.timeLimit;
+    missionUsedCheats = false;
+    taxiFareActive = null;
+
+    if (m.weather) {
+      envState.weather = m.weather;
+      if (m.weather === 'night') envState.timeHours = 23.0;
+      else if (m.weather === 'sunset') envState.timeHours = 18.0;
+      else envState.timeHours = 11.0;
+    }
+
+    if (m.spawnVehicle) {
+      const sv = spawnWorldVehicle(m.spawnVehicle, playerState.x + 4, playerState.z + 4, playerState.angle);
+      enterVehicle(sv);
+    }
+
+    if (m.startWanted) {
+      trafficPolice.setWantedLevelDirect(m.startWanted);
+    } else {
+      trafficPolice.setWantedLevelDirect(0);
+    }
+
+    missionStartDamage = playerState.currentVehicle ? playerState.currentVehicle.damage : 0;
+    sound.playChime('start');
+    showToast(`🎯 Started ${m.title}`, 'info');
+    closeAllModals();
+    updateMissionHUD();
+  }
+
+  function failMission(reason) {
+    if (!activeMission) return;
+    const failedTitle = activeMission.title;
+    activeMission = null;
+    missionBeacon.visible = false;
+    sound.playChime('fail');
+    showToast(`❌ MISSION FAILED (${failedTitle}): ${reason}`, 'warn');
+    updateMissionHUD();
+  }
+
+  function completeMission() {
+    if (!activeMission) return;
+    const m = activeMission;
+    activeMission = null;
+    missionBeacon.visible = false;
+
+    saveState.money += m.reward;
+    if (!saveState.completedMissions.includes(m.id)) {
+      saveState.completedMissions.push(m.id);
+    }
+    saveState.stats.missionsCompleted = (saveState.stats.missionsCompleted || 0) + 1;
+    saveGameState(saveState);
+
+    sound.playChime('success');
+    const cheatTag = missionUsedCheats ? ' (Cheat-Assisted Run)' : '';
+    showToast(`🏆 MISSION PASSED: ${m.title}! Reward +₹${m.reward.toLocaleString()}${cheatTag}`, 'success');
+    updateMissionHUD();
+    updateEconomyHUD();
+  }
+
+  function updateMissionLogic(dt) {
+    if (!activeMission) {
+      missionBeacon.visible = false;
+      return;
+    }
+
+    missionTimer -= dt;
+    if (missionTimer <= 0) {
+      failMission('Timer expired before objectives were completed!');
+      return;
+    }
+
+    const rules = activeMission.rules || {};
+    const curDamage = playerState.currentVehicle
+      ? Math.max(0, playerState.currentVehicle.damage - missionStartDamage)
+      : 0;
+
+    if (rules.maxDamage !== undefined && curDamage > rules.maxDamage) {
+      failMission(`Vehicle damage (${Math.round(curDamage)}%) exceeded limit (${rules.maxDamage}%)!`);
+      return;
+    }
+
+    if (rules.speedLimit && Math.abs(playerState.speed) * 2.2 > rules.speedLimit + 4) {
+      failMission(`Exceeded strict ${rules.speedLimit} km/h speed limit!`);
+      return;
+    }
+
+    const stage = activeMission.stages[missionStageIdx];
+    if (!stage) {
+      completeMission();
+      return;
+    }
+
+    // Position 3D glowing mission beacon at current stage target
+    missionBeacon.visible = true;
+    missionBeacon.position.set(stage.x, 22, stage.z);
+    missionBeacon.rotation.y += dt * 1.5;
+
+    const dist = Math.hypot(playerState.x - stage.x, playerState.z - stage.z);
+    const speedKmh = Math.abs(playerState.speed) * 2.2;
+
+    if (stage.type === 'goto' && dist <= stage.radius) {
+      missionStageIdx++;
+      sound.playChime('start');
+      if (missionStageIdx >= activeMission.stages.length) completeMission();
+      else showToast(`✅ Checkpoint Reached! Next: ${activeMission.stages[missionStageIdx].label}`, 'info');
+    } else if (stage.type === 'park' && dist <= stage.radius && speedKmh < 4.5) {
+      missionStageIdx++;
+      sound.playChime('start');
+      if (missionStageIdx >= activeMission.stages.length) completeMission();
+      else showToast(`🅿️ Parked Cleanly! Proceed to next bay.`, 'info');
+    } else if (stage.type === 'trigger_wanted' && dist <= stage.radius) {
+      trafficPolice.setWantedLevelDirect(stage.wantedTarget || 2);
+      missionStageIdx++;
+      sound.playChime('start');
+      showToast(`🚨 CCTV Red-Light Camera Triggered! Lose the police and reach the Safehouse!`, 'warn');
+    } else if (stage.type === 'escape_and_goto' && dist <= stage.radius) {
+      if (trafficPolice.wantedLevel > 0 && trafficPolice.lineOfSight) {
+        // Must break line of sight or clear wanted
+      } else {
+        trafficPolice.setWantedLevelDirect(0);
+        missionStageIdx++;
+        if (missionStageIdx >= activeMission.stages.length) completeMission();
+      }
+    }
+
+    updateMissionHUD();
+  }
+
+  // Enter / Exit Vehicle Logic
+  function enterVehicle(vObj) {
+    playerState.inVehicle = true;
+    playerState.currentVehicle = vObj;
+    playerState.x = vObj.x;
+    playerState.z = vObj.z;
+    playerState.angle = vObj.angle;
+    playerState.speed = vObj.speed || 0;
+    playerMesh.visible = false;
+    showToast(`🚗 Entered ${vObj.spec.name}`, 'info');
+  }
+
+  function toggleEnterExitVehicle() {
+    if (playerState.inVehicle && playerState.currentVehicle) {
+      const v = playerState.currentVehicle;
+      v.speed = 0;
+      playerState.inVehicle = false;
+      playerState.x = v.x - Math.cos(v.angle) * 2.4;
+      playerState.z = v.z + Math.sin(v.angle) * 2.4;
+      playerState.speed = 0;
+      playerMesh.position.set(playerState.x, 0, playerState.z);
+      playerMesh.visible = true;
+      showToast(`🚶 Stepped out on foot. Press E near any vehicle to enter.`, 'info');
+    } else {
+      // Find nearest parked or AI vehicle within 6.5m
+      let bestVeh = null;
+      let bestDist = 7.0;
+      for (const pv of parkedVehicles) {
+        const d = Math.hypot(pv.x - playerState.x, pv.z - playerState.z);
+        if (d < bestDist) {
+          bestDist = d;
+          bestVeh = pv;
+        }
+      }
+      if (!bestVeh) {
+        // Commandandeer nearest AI traffic vehicle
+        for (const ai of trafficPolice.aiVehicles) {
+          const d = Math.hypot(ai.x - playerState.x, ai.z - playerState.z);
+          if (d < bestDist) {
+            bestDist = d;
+            bestVeh = spawnWorldVehicle(ai.type, ai.x, ai.z, ai.angle);
+            ai.x += 120; // Move AI slot away
+            break;
+          }
+        }
+      }
+      if (bestVeh) {
+        enterVehicle(bestVeh);
+      } else {
+        showToast('No vehicle within reach! Walk closer or use SPAWNCAR in Cheat Console (`).', 'warn');
+      }
+    }
+  }
+
+  // Execute Cheat Code
+  function executeCheatCode(rawInput) {
+    const code = (rawInput || '').trim().toUpperCase();
+    const feedbackEl = document.getElementById('cheat-feedback');
+    if (!code) return;
+
+    if (!CHEAT_CODES[code]) {
+      if (feedbackEl) {
+        feedbackEl.textContent = `❌ Invalid Cheat Code: "${code}". Try FULLHEALTH, REPAIRCAR, ADD5000, SPAWNSUV, NOS, CLEARCHASE...`;
+        feedbackEl.className = 'text-xs mt-2 font-medium text-rose-400';
+      }
+      sound.playChime('fail');
+      return;
+    }
+
+    missionUsedCheats = true;
+    saveState.stats.cheatsUsed = (saveState.stats.cheatsUsed || 0) + 1;
+
+    switch (code) {
+      case 'FULLHEALTH':
+        playerState.health = 100;
+        break;
+      case 'REPAIRCAR':
+        if (playerState.currentVehicle) {
+          playerState.currentVehicle.damage = 0;
+          playerState.currentVehicle.fuel = 100;
+          playerState.currentVehicle.nos = 100;
+        }
+        break;
+      case 'ADD5000':
+        saveState.money += 5000;
+        saveGameState(saveState);
+        break;
+      case 'SPAWNCAR': {
+        const sx = playerState.x + Math.sin(playerState.angle) * 6;
+        const sz = playerState.z + Math.cos(playerState.angle) * 6;
+        const v = spawnWorldVehicle('sedan', sx, sz, playerState.angle);
+        enterVehicle(v);
+        break;
+      }
+      case 'SPAWNSUV': {
+        const sx = playerState.x + Math.sin(playerState.angle) * 6.5;
+        const sz = playerState.z + Math.cos(playerState.angle) * 6.5;
+        const v = spawnWorldVehicle('suv', sx, sz, playerState.angle);
+        enterVehicle(v);
+        break;
+      }
+      case 'SPAWNBIKE': {
+        const sx = playerState.x + Math.sin(playerState.angle) * 5;
+        const sz = playerState.z + Math.cos(playerState.angle) * 5;
+        const v = spawnWorldVehicle('bike', sx, sz, playerState.angle);
+        enterVehicle(v);
+        break;
+      }
+      case 'NOS':
+        if (playerState.currentVehicle) {
+          playerState.currentVehicle.nos = 100;
+          playerState.nosActive = true;
+          playerState.speed = Math.max(playerState.speed, 48);
+        }
+        break;
+      case 'CLEARCHASE':
+        trafficPolice.setWantedLevelDirect(0);
+        break;
+      case 'WANTEDUP':
+        trafficPolice.setWantedLevelDirect(trafficPolice.wantedLevel + 1);
+        break;
+      case 'WANTEDDOWN':
+        trafficPolice.setWantedLevelDirect(trafficPolice.wantedLevel - 1);
+        break;
+      case 'SUNNYDAY':
+        envState.weather = 'sunny';
+        envState.timeHours = 11.5;
+        break;
+      case 'RAINMODE':
+        envState.weather = 'rain';
+        break;
+      case 'MIDNIGHT':
+        envState.weather = 'night';
+        envState.timeHours = 0.0;
+        break;
+      case 'SUPERJUMP':
+        playerState.superJump = !playerState.superJump;
+        break;
+      case 'SLOWMO':
+        playerState.slowMo = !playerState.slowMo;
+        break;
+    }
+
+    sound.playChime('success');
+    const desc = CHEAT_CODES[code].desc;
+    if (feedbackEl) {
+      feedbackEl.textContent = `✅ CHEAT ACTIVATED [${code}]: ${desc}`;
+      feedbackEl.className = 'text-xs mt-2 font-medium text-emerald-400';
+    }
+    showToast(`⚡ CHEAT ACTIVATED: ${code} — ${desc}`, 'success');
+    updateEconomyHUD();
+  }
+
+  // Minimap & Full Map Canvas Rendering
+  const minimapCanvas = document.getElementById('minimap-canvas');
+  const minimapCtx = minimapCanvas ? minimapCanvas.getContext('2d') : null;
+  const fullmapCanvas = document.getElementById('fullmap-canvas');
+  const fullmapCtx = fullmapCanvas ? fullmapCanvas.getContext('2d') : null;
+
+  function drawMinimap() {
+    if (!minimapCtx) return;
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = 0.34;
+
+    minimapCtx.clearRect(0, 0, w, h);
+    minimapCtx.save();
+
+    // Circular clip
+    minimapCtx.beginPath();
+    minimapCtx.arc(cx, cy, cx - 2, 0, Math.PI * 2);
+    minimapCtx.clip();
+
+    // Background lawn
+    minimapCtx.fillStyle = '#0f291e';
+    minimapCtx.fillRect(0, 0, w, h);
+
+    // Rotate with player heading
+    minimapCtx.translate(cx, cy);
+    minimapCtx.rotate(playerState.angle - Math.PI);
+
+    const toMapX = (wx) => (wx - playerState.x) * scale;
+    const toMapY = (wz) => (wz - playerState.z) * scale;
+
+    // Draw Roads
+    minimapCtx.strokeStyle = '#334155';
+    minimapCtx.lineWidth = WORLD_CONFIG.ROAD_WIDTH * scale;
+    WORLD_CONFIG.ROADS_X.forEach((rx) => {
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(toMapX(rx), toMapY(-800));
+      minimapCtx.lineTo(toMapX(rx), toMapY(800));
+      minimapCtx.stroke();
+    });
+    WORLD_CONFIG.ROADS_Z.forEach((rz) => {
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(toMapX(-800), toMapY(rz));
+      minimapCtx.lineTo(toMapX(800), toMapY(rz));
+      minimapCtx.stroke();
+    });
+
+    // Draw Landmarks
+    LANDMARKS.forEach((lm) => {
+      minimapCtx.fillStyle = lm.color;
+      minimapCtx.beginPath();
+      minimapCtx.arc(toMapX(lm.x), toMapY(lm.z), 4.5, 0, Math.PI * 2);
+      minimapCtx.fill();
+    });
+
+    // Draw AI Traffic dots
+    minimapCtx.fillStyle = '#94a3b8';
+    trafficPolice.aiVehicles.forEach((ai) => {
+      minimapCtx.fillRect(toMapX(ai.x) - 1.5, toMapY(ai.z) - 1.5, 3, 3);
+    });
+
+    // Draw Police Units (Flashing Red/Blue)
+    const copFlash = Math.floor(performance.now() / 200) % 2 === 0;
+    trafficPolice.policeUnits.forEach((cop) => {
+      minimapCtx.fillStyle = copFlash ? '#ef4444' : '#3b82f6';
+      minimapCtx.beginPath();
+      minimapCtx.arc(toMapX(cop.x), toMapY(cop.z), 4, 0, Math.PI * 2);
+      minimapCtx.fill();
+    });
+
+    // Draw Active Mission Objective Target or Custom Waypoint
+    const targetStage = activeMission ? activeMission.stages[missionStageIdx] : playerState.waypoint;
+    if (targetStage) {
+      const tx = toMapX(targetStage.x);
+      const ty = toMapY(targetStage.z);
+      minimapCtx.strokeStyle = '#facc15';
+      minimapCtx.lineWidth = 2;
+      minimapCtx.setLineDash([4, 4]);
+      minimapCtx.beginPath();
+      minimapCtx.moveTo(0, 0);
+      minimapCtx.lineTo(tx, ty);
+      minimapCtx.stroke();
+      minimapCtx.setLineDash([]);
+
+      minimapCtx.fillStyle = '#facc15';
+      minimapCtx.beginPath();
+      minimapCtx.arc(tx, ty, 6, 0, Math.PI * 2);
+      minimapCtx.fill();
+    }
+
+    minimapCtx.restore();
+
+    // Player Arrow in Center
+    minimapCtx.save();
+    minimapCtx.translate(cx, cy);
+    minimapCtx.fillStyle = '#38bdf8';
+    minimapCtx.strokeStyle = '#ffffff';
+    minimapCtx.lineWidth = 1.5;
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(0, -7);
+    minimapCtx.lineTo(-5.5, 6);
+    minimapCtx.lineTo(0, 3);
+    minimapCtx.lineTo(5.5, 6);
+    minimapCtx.closePath();
+    minimapCtx.fill();
+    minimapCtx.stroke();
+    minimapCtx.restore();
+  }
+
+  function drawFullMap() {
+    if (!fullmapCtx || !fullmapCanvas) return;
+    const w = fullmapCanvas.width;
+    const h = fullmapCanvas.height;
+    const scale = w / WORLD_CONFIG.SIZE;
+    const toX = (wx) => (wx + WORLD_CONFIG.HALF_SIZE) * scale;
+    const toY = (wz) => (wz + WORLD_CONFIG.HALF_SIZE) * scale;
+
+    fullmapCtx.fillStyle = '#0f291e';
+    fullmapCtx.fillRect(0, 0, w, h);
+
+    // Roads
+    fullmapCtx.strokeStyle = '#334155';
+    fullmapCtx.lineWidth = WORLD_CONFIG.ROAD_WIDTH * scale;
+    WORLD_CONFIG.ROADS_X.forEach((rx) => {
+      fullmapCtx.beginPath();
+      fullmapCtx.moveTo(toX(rx), 0);
+      fullmapCtx.lineTo(toX(rx), h);
+      fullmapCtx.stroke();
+    });
+    WORLD_CONFIG.ROADS_Z.forEach((rz) => {
+      fullmapCtx.beginPath();
+      fullmapCtx.moveTo(0, toY(rz));
+      fullmapCtx.lineTo(w, toY(rz));
+      fullmapCtx.stroke();
+    });
+
+    // Landmarks
+    LANDMARKS.forEach((lm) => {
+      const lx = toX(lm.x);
+      const ly = toY(lm.z);
+      fullmapCtx.fillStyle = lm.color;
+      fullmapCtx.beginPath();
+      fullmapCtx.arc(lx, ly, 7, 0, Math.PI * 2);
+      fullmapCtx.fill();
+      fullmapCtx.fillStyle = '#f8fafc';
+      fullmapCtx.font = 'bold 10px Inter, sans-serif';
+      fullmapCtx.fillText(`${lm.icon} ${lm.sector}`, lx + 9, ly + 4);
+    });
+
+    // Service stations
+    SERVICE_STATIONS.forEach((st) => {
+      fullmapCtx.fillStyle = st.type === 'fuel' ? '#f97316' : st.type === 'garage' ? '#a855f7' : '#22c55e';
+      fullmapCtx.fillRect(toX(st.x) - 4, toY(st.z) - 4, 8, 8);
+    });
+
+    // Waypoint
+    if (playerState.waypoint) {
+      fullmapCtx.strokeStyle = '#facc15';
+      fullmapCtx.lineWidth = 2.5;
+      fullmapCtx.beginPath();
+      fullmapCtx.arc(toX(playerState.waypoint.x), toY(playerState.waypoint.z), 9, 0, Math.PI * 2);
+      fullmapCtx.stroke();
+    }
+
+    // Player marker
+    fullmapCtx.fillStyle = '#38bdf8';
+    fullmapCtx.beginPath();
+    fullmapCtx.arc(toX(playerState.x), toY(playerState.z), 6.5, 0, Math.PI * 2);
+    fullmapCtx.fill();
+  }
+
+  // Update DOM HUD Elements
+  function updateEconomyHUD() {
+    const moneyEl = document.getElementById('hud-money');
+    if (moneyEl) moneyEl.textContent = `₹${Math.round(saveState.money).toLocaleString()}`;
+    const trophyEl = document.getElementById('hud-trophies');
+    if (trophyEl) trophyEl.textContent = `${saveState.collectedTrophies.length}/${WORLD_CONFIG.COLLECTIBLE_COUNT}`;
+  }
+
+  function updateMissionHUD() {
+    const box = document.getElementById('hud-mission-panel');
+    if (!box) return;
+    if (!activeMission) {
+      if (taxiFareActive) {
+        box.innerHTML = `
+          <div class="text-xs font-bold uppercase tracking-wider text-amber-400">🚕 Side Activity: Instant Taxi Fare</div>
+          <div class="text-sm font-semibold text-white mt-0.5">${taxiFareActive.label}</div>
+          <div class="text-xs text-slate-300 mt-1">Fare Bonus: ₹${taxiFareActive.reward}</div>
+        `;
+      } else {
+        box.innerHTML = `
+          <div class="text-xs font-bold uppercase tracking-wider text-sky-400">Free-Roam Mode — Chandigarh</div>
+          <div class="text-xs text-slate-300 mt-0.5">Drive into any blue glowing ring or press <span class="px-1.5 py-0.5 bg-slate-800 rounded text-amber-300 font-mono">Tab</span> to launch 32 Missions.</div>
+        `;
+      }
+      return;
+    }
+
+    const st = activeMission.stages[missionStageIdx];
+    const mins = Math.floor(missionTimer / 60);
+    const secs = Math.floor(missionTimer % 60).toString().padStart(2, '0');
+    box.innerHTML = `
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold uppercase tracking-wider text-amber-400">${activeMission.title}</span>
+        <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-600">⏱ ${mins}:${secs}</span>
+      </div>
+      <div class="text-sm font-semibold text-white mt-1">${st ? st.label : 'Complete!'}</div>
+      <div class="text-[11px] text-slate-300 mt-0.5">Stage ${missionStageIdx + 1}/${activeMission.stages.length} • Reward: ₹${activeMission.reward.toLocaleString()}</div>
+    `;
+  }
+
+  // Main Physics & Frame Update Loop
+  let lastTime = performance.now();
+
+  function updatePhysics(dt) {
+    // 1. Check Landmark Location Banner
+    let currentLandmark = 'Chandigarh Urban Sector Grid';
+    for (const lm of LANDMARKS) {
+      if (Math.hypot(playerState.x - lm.x, playerState.z - lm.z) <= lm.radius) {
+        currentLandmark = `${lm.icon} ${lm.name} (${lm.sector})`;
+        break;
+      }
+    }
+    const locEl = document.getElementById('hud-location');
+    if (locEl) locEl.textContent = currentLandmark;
+
+    // 2. Rotate Open Hand Monument & Bob Sukhna Boats
+    if (worldData.openHandMesh) {
+      worldData.openHandMesh.rotation.y += dt * 0.45;
+    }
+    const nowSec = performance.now() * 0.001;
+    worldData.sukhnaBoats.forEach((b) => {
+      b.mesh.position.z = b.baseZ + Math.sin(nowSec + b.phase) * 14;
+    });
+
+    // 3. Collectible Trophy Pickup Check
+    worldData.collectibles.forEach((t) => {
+      if (!t.collected) {
+        t.mesh.rotation.y += dt * 2.2;
+        if (Math.hypot(playerState.x - t.x, playerState.z - t.z) < 5.5) {
+          t.collected = true;
+          t.mesh.visible = false;
+          saveState.collectedTrophies.push(t.id);
+          saveState.money += 1000;
+          saveGameState(saveState);
+          sound.playChime('success');
+          showToast(`✋ Collected Golden Open Hand Trophy (${saveState.collectedTrophies.length}/20)! +₹1,000`, 'success');
+          updateEconomyHUD();
+        }
+      }
+    });
+
+    // 4. Service Station Proximity Check (Fuel, Garage, Safehouse)
+    for (const st of SERVICE_STATIONS) {
+      if (Math.hypot(playerState.x - st.x, playerState.z - st.z) < 8.5 && Math.abs(playerState.speed) < 6) {
+        if (st.type === 'fuel' && playerState.currentVehicle && playerState.currentVehicle.fuel < 95) {
+          playerState.currentVehicle.fuel = 100;
+          playerState.currentVehicle.nos = 100;
+          saveState.money = Math.max(0, saveState.money - 150);
+          sound.playChime('start');
+          showToast(`⛽ Refueled tank & NOS at ${st.name} (-₹150)`, 'info');
+          updateEconomyHUD();
+        } else if (st.type === 'safehouse' && trafficPolice.wantedLevel > 0 && !trafficPolice.lineOfSight) {
+          trafficPolice.setWantedLevelDirect(0);
+          playerState.health = 100;
+          saveGameState(saveState);
+          sound.playChime('success');
+          showToast(`🏠 Laid low at ${st.name}! Wanted Level cleared & game saved.`, 'success');
+        }
+      }
+    }
+
+    // 5. Player Driving vs On-Foot Physics
+    const forward = keys['KeyW'] || keys['ArrowUp'] ? 1 : 0;
+    const backward = keys['KeyS'] || keys['ArrowDown'] ? 1 : 0;
+    const left = keys['KeyA'] || keys['ArrowLeft'] ? 1 : 0;
+    const right = keys['KeyD'] || keys['ArrowRight'] ? 1 : 0;
+    const handbrake = keys['Space'] ? 1 : 0;
+    const boost = keys['ShiftLeft'] || keys['ShiftRight'] || playerState.nosActive ? 1 : 0;
+
+    if (playerState.inVehicle && playerState.currentVehicle) {
+      const v = playerState.currentVehicle;
+      const spec = v.spec;
+      const cust = saveState.vehicleCustomizations[v.type] || { engineLevel: 1, armorLevel: 1 };
+      const engineMult = 1 + (cust.engineLevel - 1) * 0.12;
+      const maxSpd = spec.maxSpeed * engineMult;
+      const rainGripMult = envState.weather === 'rain' ? 0.78 : 1.0;
+
+      // Acceleration & Braking
+      if (v.fuel > 0) {
+        if (forward) {
+          playerState.speed += spec.accel * engineMult * dt;
+        } else if (backward) {
+          if (playerState.speed > 2) playerState.speed -= spec.brake * dt;
+          else playerState.speed -= spec.accel * 0.55 * dt;
+        } else {
+          playerState.speed *= Math.pow(0.28, dt);
+        }
+      } else {
+        playerState.speed *= Math.pow(0.2, dt);
+      }
+
+      // Nitro Boost
+      if (boost && v.nos > 5 && forward) {
+        playerState.speed += 28 * dt;
+        v.nos = Math.max(0, v.nos - 24 * dt);
+      } else {
+        v.nos = Math.min(100, v.nos + 4 * dt);
+        playerState.nosActive = false;
+      }
+
+      // Handbrake Drift
+      if (handbrake) {
+        playerState.speed *= Math.pow(0.08, dt);
+        if (Math.abs(playerState.speed) > 14 && Math.random() < 0.25) {
+          sound.playSkid();
+        }
+      }
+
+      playerState.speed = Math.max(-maxSpd * 0.42, Math.min(maxSpd * (boost ? 1.25 : 1), playerState.speed));
+
+      // Steering
+      if (Math.abs(playerState.speed) > 0.6) {
+        const dirSign = playerState.speed >= 0 ? 1 : -1;
+        const driftBoost = handbrake ? 1.45 : 1.0;
+        const steerAmount = (left - right) * spec.turnRate * rainGripMult * driftBoost * dirSign * dt;
+        playerState.angle += steerAmount;
+      }
+
+      // Velocity displacement
+      const nextX = playerState.x + Math.sin(playerState.angle) * playerState.speed * dt;
+      const nextZ = playerState.z + Math.cos(playerState.angle) * playerState.speed * dt;
+
+      // Building / Roundabout Collider Check
+      let collided = false;
+      for (const col of worldData.colliders) {
+        if (Math.abs(nextX - col.x) < col.hw + 1.5 && Math.abs(nextZ - col.z) < col.hd + 1.5) {
+          collided = true;
+          const impact = Math.abs(playerState.speed);
+          playerState.speed = -playerState.speed * 0.38;
+          if (impact > 10) {
+            sound.playCrash(impact / 30);
+            v.damage = Math.min(100, v.damage + impact * 0.28);
+            if (activeMission && activeMission.rules?.noCrash) {
+              failMission(`Crashed into ${col.label}!`);
+            }
+          }
+          break;
+        }
+      }
+
+      // AI Vehicle Collision Check
+      for (const ai of trafficPolice.aiVehicles) {
+        if (Math.hypot(nextX - ai.x, nextZ - ai.z) < 3.4) {
+          collided = true;
+          const impact = Math.abs(playerState.speed - ai.speed);
+          playerState.speed *= -0.35;
+          sound.playCrash(impact / 25);
+          v.damage = Math.min(100, v.damage + Math.max(2, impact * 0.35));
+          trafficPolice.reportViolation('Collided with Civilian Traffic', 14, 800, showToast);
+          if (activeMission && activeMission.rules?.noCrash) {
+            failMission('Collided with civilian vehicle!');
+          }
+          break;
+        }
+      }
+
+      if (!collided) {
+        playerState.x = Math.max(-760, Math.min(760, nextX));
+        playerState.z = Math.max(-760, Math.min(760, nextZ));
+      }
+
+      // Fuel consumption & distance tracking
+      const distMoved = Math.abs(playerState.speed) * dt;
+      v.fuel = Math.max(0, v.fuel - distMoved * 0.015);
+      saveState.stats.distanceDrivenKm = (saveState.stats.distanceDrivenKm || 0) + distMoved * 0.001;
+
+      v.x = playerState.x;
+      v.z = playerState.z;
+      v.angle = playerState.angle;
+      v.speed = playerState.speed;
+      v.mesh.position.set(v.x, 0, v.z);
+      v.mesh.rotation.y = v.angle;
+
+      // Spin wheels
+      if (v.mesh.userData.wheels) {
+        v.mesh.userData.wheels.forEach((w) => {
+          w.rotation.x += playerState.speed * dt * 1.4;
+        });
+      }
+    } else {
+      // On-Foot Movement & Super-Jump
+      const walkSpeed = (boost ? 14 : 8.5) * (forward - backward);
+      playerState.speed = walkSpeed;
+      playerState.angle += (left - right) * 2.8 * dt;
+
+      const nx = playerState.x + Math.sin(playerState.angle) * walkSpeed * dt;
+      const nz = playerState.z + Math.cos(playerState.angle) * walkSpeed * dt;
+      playerState.x = Math.max(-760, Math.min(760, nx));
+      playerState.z = Math.max(-760, Math.min(760, nz));
+
+      if (handbrake && playerState.y <= 0.05) {
+        playerState.vy = playerState.superJump ? 26 : 9.5;
+      }
+      playerState.y += playerState.vy * dt;
+      if (playerState.y > 0) {
+        playerState.vy -= 24 * dt;
+      } else {
+        playerState.y = 0;
+        playerState.vy = 0;
+      }
+
+      playerMesh.position.set(playerState.x, playerState.y, playerState.z);
+      playerMesh.rotation.y = playerState.angle;
+    }
+
+    // 6. Camera Follow Modes
+    const camAngle = playerState.angle;
+    if (playerState.cameraMode === 0) {
+      // Standard 3rd-Person Chase
+      const targetX = playerState.x - Math.sin(camAngle) * 11.5;
+      const targetZ = playerState.z - Math.cos(camAngle) * 11.5;
+      camera.position.lerp(new THREE.Vector3(targetX, playerState.y + 5.2, targetZ), Math.min(1, dt * 8));
+      camera.lookAt(playerState.x + Math.sin(camAngle) * 6, playerState.y + 1.6, playerState.z + Math.cos(camAngle) * 6);
+    } else if (playerState.cameraMode === 1) {
+      // Far Cinematic Chase
+      const targetX = playerState.x - Math.sin(camAngle) * 18.5;
+      const targetZ = playerState.z - Math.cos(camAngle) * 18.5;
+      camera.position.lerp(new THREE.Vector3(targetX, playerState.y + 8.8, targetZ), Math.min(1, dt * 7));
+      camera.lookAt(playerState.x + Math.sin(camAngle) * 8, playerState.y + 1.8, playerState.z + Math.cos(camAngle) * 8);
+    } else if (playerState.cameraMode === 2) {
+      // 1st-Person Hood / Cockpit Camera
+      const hoodX = playerState.x + Math.sin(camAngle) * 0.8;
+      const hoodZ = playerState.z + Math.cos(camAngle) * 0.8;
+      camera.position.set(hoodX, playerState.y + 1.65, hoodZ);
+      camera.lookAt(playerState.x + Math.sin(camAngle) * 30, playerState.y + 1.5, playerState.z + Math.cos(camAngle) * 30);
+    } else {
+      // Classic GTA Top-Down Helicopter View
+      camera.position.set(playerState.x, 68, playerState.z - 8);
+      camera.lookAt(playerState.x, 0, playerState.z);
+    }
+
+    // 7. Check Free-Roam Mission Trigger Rings
+    if (!activeMission) {
+      for (const item of missionStartMeshes) {
+        item.mesh.rotation.y += dt * 1.2;
+        if (Math.hypot(playerState.x - item.x, playerState.z - item.z) < 4.5 && Math.abs(playerState.speed) < 8) {
+          startMission(item.mission.id);
+          break;
+        }
+      }
+    }
+
+    // 8. Check Instant Side Taxi Fare
+    if (taxiFareActive && !activeMission) {
+      if (Math.hypot(playerState.x - taxiFareActive.x, playerState.z - taxiFareActive.z) < 15) {
+        saveState.money += taxiFareActive.reward;
+        saveGameState(saveState);
+        sound.playChime('success');
+        showToast(`🚕 Taxi Fare Completed! Earned +₹${taxiFareActive.reward}`, 'success');
+        taxiFareActive = null;
+        missionBeacon.visible = false;
+        updateMissionHUD();
+        updateEconomyHUD();
+      } else {
+        missionBeacon.visible = true;
+        missionBeacon.position.set(taxiFareActive.x, 22, taxiFareActive.z);
+      }
+    }
+
+    // 9. Update HUD Gauges (Speed, Fuel, Damage, Wanted Stars, Traffic Signal Indicator)
+    const speedKmh = Math.round(Math.abs(playerState.speed) * 2.2);
+    const speedEl = document.getElementById('hud-speed');
+    if (speedEl) speedEl.textContent = speedKmh;
+
+    const vehNameEl = document.getElementById('hud-vehicle-name');
+    if (vehNameEl) {
+      vehNameEl.textContent = playerState.inVehicle && playerState.currentVehicle
+        ? playerState.currentVehicle.spec.name
+        : 'On Foot (Press E near car)';
+    }
+
+    const fuelBar = document.getElementById('hud-fuel-bar');
+    const dmgBar = document.getElementById('hud-damage-bar');
+    const nosBar = document.getElementById('hud-nos-bar');
+    if (playerState.currentVehicle) {
+      if (fuelBar) fuelBar.style.width = `${Math.round(playerState.currentVehicle.fuel)}%`;
+      if (dmgBar) dmgBar.style.width = `${Math.round(100 - playerState.currentVehicle.damage)}%`;
+      if (nosBar) nosBar.style.width = `${Math.round(playerState.currentVehicle.nos)}%`;
+    }
+
+    // Wanted Stars Display
+    const starsEl = document.getElementById('hud-wanted-stars');
+    const wantedDescEl = document.getElementById('hud-wanted-status');
+    if (starsEl) {
+      let starsHtml = '';
+      for (let s = 1; s <= 5; s++) {
+        const active = s <= trafficPolice.wantedLevel;
+        starsHtml += `<span class="${active ? 'text-amber-400 animate-pulse drop-shadow' : 'text-slate-700'} text-lg">★</span>`;
+      }
+      starsEl.innerHTML = starsHtml;
+    }
+    if (wantedDescEl) {
+      const labels = [
+        'Level 0: Normal Patrol',
+        `Level 1: Challan Fine ₹${trafficPolice.finePending} (Press P)`,
+        'Level 2: PCR Unit Pursuit',
+        'Level 3: Tactical Roadblock',
+        'Level 4: Heavy Box-In Pursuit',
+        'Level 5: Citywide Lockdown'
+      ];
+      wantedDescEl.textContent = labels[trafficPolice.wantedLevel] || '';
+    }
+
+    // Nearest Traffic Light Indicator on HUD
+    const { signal, dist } = trafficPolice.getNearestSignal(playerState.x, playerState.z);
+    const sigDot = document.getElementById('hud-signal-dot');
+    const sigText = document.getElementById('hud-signal-text');
+    if (sigDot && sigText && signal && dist < 75) {
+      const movingNS = Math.abs(Math.cos(playerState.angle)) > 0.7;
+      const isGreen = (movingNS && signal.state === 'NS_GREEN') || (!movingNS && signal.state === 'EW_GREEN');
+      const isYellow = signal.state === 'YELLOW';
+      sigDot.className = `w-3 h-3 rounded-full ${isYellow ? 'bg-amber-400' : isGreen ? 'bg-emerald-400' : 'bg-rose-500'}`;
+      sigText.textContent = isYellow ? 'Signal: YELLOW' : isGreen ? 'Signal: GREEN' : 'Signal: RED (STOP)';
+    }
+  }
+
+  // Modal & Menu Wiring
+  function closeAllModals() {
+    ['modal-missions', 'modal-garage', 'modal-map', 'modal-cheats', 'modal-settings', 'modal-engine-guide'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+    gamePaused = false;
+  }
+
+  function openModal(id) {
+    closeAllModals();
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.remove('hidden');
+      gamePaused = true;
+      if (id === 'modal-map') drawFullMap();
+      if (id === 'modal-missions') renderMissionsList();
+      if (id === 'modal-garage') renderGarageList();
+    }
+  }
+
+  function renderMissionsList(filterCat = 'ALL') {
+    const container = document.getElementById('missions-list-container');
+    if (!container) return;
+    const filtered = filterCat === 'ALL' ? ALL_MISSIONS : ALL_MISSIONS.filter((m) => m.category === filterCat);
+
+    container.innerHTML = filtered
+      .map((m) => {
+        const done = saveState.completedMissions.includes(m.id);
+        return `
+        <div class="p-3.5 rounded-xl bg-slate-800/90 border ${done ? 'border-emerald-500/50' : 'border-slate-700'} flex flex-col justify-between gap-2">
+          <div>
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">${m.category}</span>
+              <span class="text-xs font-mono font-bold text-emerald-400">+₹${m.reward.toLocaleString()}</span>
+            </div>
+            <h4 class="text-sm font-bold text-white mt-1.5">${m.title} ${done ? '✅' : ''}</h4>
+            <p class="text-xs text-slate-300 mt-1 leading-relaxed">${m.brief}</p>
+          </div>
+          <div class="flex items-center justify-between pt-2 border-t border-slate-700/60">
+            <span class="text-[11px] text-slate-400">⏱ ${m.timeLimit}s • Weather: ${m.weather.toUpperCase()}</span>
+            <button data-start-mission="${m.id}" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition">
+              Launch Mission
+            </button>
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+
+    container.querySelectorAll('[data-start-mission]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        startMission(btn.getAttribute('data-start-mission'));
+      });
+    });
+  }
+
+  function renderGarageList() {
+    const container = document.getElementById('garage-list-container');
+    if (!container) return;
+    const colors = ['#e11d48', '#f59e0b', '#10b981', '#0284c7', '#7c3aed', '#f8fafc', '#1e293b'];
+
+    container.innerHTML = Object.values(VEHICLE_CATALOG)
+      .map((spec) => {
+        const unlocked = saveState.unlockedVehicles.includes(spec.id);
+        const selected = saveState.selectedVehicle === spec.id;
+        const cust = saveState.vehicleCustomizations[spec.id] || { color: spec.defaultColor, engineLevel: 1, armorLevel: 1 };
+
+        return `
+        <div class="p-4 rounded-xl bg-slate-800/90 border ${selected ? 'border-amber-400' : 'border-slate-700'} flex flex-col justify-between gap-3">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-sky-400">${spec.category}</span>
+              <span class="text-xs font-mono font-bold ${unlocked ? 'text-emerald-400' : 'text-amber-300'}">${unlocked ? 'OWNED' : '₹' + spec.price.toLocaleString()}</span>
+            </div>
+            <h4 class="text-base font-bold text-white mt-1">${spec.name}</h4>
+            <p class="text-xs text-slate-300 mt-1">${spec.description}</p>
+            <div class="mt-2.5 space-y-1 text-[11px] text-slate-300">
+              <div>Top Speed: <span class="text-white font-semibold">${Math.round(spec.maxSpeed * 2.2)} km/h</span> (Engine Lv.${cust.engineLevel})</div>
+              <div class="flex items-center gap-1.5 pt-1">
+                <span>Paint:</span>
+                ${colors
+                  .map(
+                    (c) =>
+                      `<button data-paint-veh="${spec.id}" data-paint-col="${c}" class="w-4 h-4 rounded-full border border-white/40" style="background:${c}"></button>`
+                  )
+                  .join('')}
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-700/60">
+            ${
+              unlocked
+                ? `<button data-spawn-veh="${spec.id}" class="flex-1 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs">Drive Now</button>
+                   <button data-upgrade-veh="${spec.id}" class="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs">Tune Engine (₹1,500)</button>`
+                : `<button data-buy-veh="${spec.id}" class="w-full px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs">Buy Vehicle (₹${spec.price.toLocaleString()})</button>`
+            }
+          </div>
+        </div>
+      `;
+      })
+      .join('');
+
+    container.querySelectorAll('[data-buy-veh]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-buy-veh');
+        const spec = VEHICLE_CATALOG[id];
+        if (saveState.money < spec.price) {
+          showToast(`Insufficient funds! Need ₹${spec.price.toLocaleString()}`, 'warn');
+          return;
+        }
+        saveState.money -= spec.price;
+        saveState.unlockedVehicles.push(id);
+        saveState.selectedVehicle = id;
+        saveGameState(saveState);
+        sound.playChime('success');
+        updateEconomyHUD();
+        renderGarageList();
+        showToast(`🎉 Purchased ${spec.name}!`, 'success');
+      });
+    });
+
+    container.querySelectorAll('[data-spawn-veh]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-spawn-veh');
+        saveState.selectedVehicle = id;
+        saveGameState(saveState);
+        const v = spawnWorldVehicle(id, playerState.x + 3, playerState.z + 3, playerState.angle);
+        enterVehicle(v);
+        closeAllModals();
+      });
+    });
+
+    container.querySelectorAll('[data-upgrade-veh]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-upgrade-veh');
+        if (saveState.money < 1500) {
+          showToast('Need ₹1,500 for Stage-2 Engine Remap!', 'warn');
+          return;
+        }
+        saveState.money -= 1500;
+        saveState.vehicleCustomizations[id].engineLevel = Math.min(5, (saveState.vehicleCustomizations[id].engineLevel || 1) + 1);
+        saveGameState(saveState);
+        sound.playChime('success');
+        updateEconomyHUD();
+        renderGarageList();
+        showToast(`🔧 Upgraded ${VEHICLE_CATALOG[id].name} Engine to Lv.${saveState.vehicleCustomizations[id].engineLevel}!`, 'success');
+      });
+    });
+
+    container.querySelectorAll('[data-paint-veh]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-paint-veh');
+        const col = btn.getAttribute('data-paint-col');
+        saveState.vehicleCustomizations[id].color = col;
+        saveGameState(saveState);
+        if (playerState.currentVehicle && playerState.currentVehicle.type === id) {
+          const v = spawnWorldVehicle(id, playerState.x, playerState.z, playerState.angle, col);
+          enterVehicle(v);
+        }
+        showToast(`🎨 Resprayed ${VEHICLE_CATALOG[id].name}!`, 'info');
+      });
+    });
+  }
+
+  // Keyboard Listeners
+  window.addEventListener('keydown', (e) => {
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+      if (e.key === 'Escape' || e.code === 'Backquote') {
+        document.activeElement.blur();
+        closeAllModals();
+      }
+      return;
+    }
+
+    keys[e.code] = true;
+    sound.init();
+
+    if (e.code === 'KeyE') toggleEnterExitVehicle();
+    else if (e.code === 'KeyC') {
+      playerState.cameraMode = (playerState.cameraMode + 1) % 4;
+      const camNames = ['3rd-Person Chase', 'Far Cinematic Chase', '1st-Person Cockpit', 'Top-Down Helicopter'];
+      showToast(`🎥 Camera: ${camNames[playerState.cameraMode]}`, 'info');
+    } else if (e.code === 'KeyH') {
+      sound.playHorn(playerState.currentVehicle ? playerState.currentVehicle.type : 'car');
+    } else if (e.code === 'KeyF') {
+      if (playerState.currentVehicle) {
+        const v = playerState.currentVehicle;
+        v.headlightsOn = !v.headlightsOn;
+        if (v.mesh.userData.headSpot) {
+          v.mesh.userData.headSpot.intensity = v.headlightsOn ? 2.6 : 0;
+        }
+        showToast(`💡 Headlights ${v.headlightsOn ? 'ON' : 'OFF'}`, 'info');
+      }
+    } else if (e.code === 'KeyR') {
+      playerState.speed = 0;
+      if (playerState.currentVehicle) {
+        playerState.currentVehicle.mesh.rotation.set(0, playerState.angle, 0);
+      }
+      showToast('🔄 Vehicle uprighted and reset onto roadway', 'info');
+    } else if (e.code === 'KeyP') {
+      if (trafficPolice.wantedLevel === 1 && trafficPolice.finePending > 0) {
+        if (saveState.money >= trafficPolice.finePending) {
+          saveState.money -= trafficPolice.finePending;
+          saveState.stats.totalFinesPaid += trafficPolice.finePending;
+          trafficPolice.setWantedLevelDirect(0);
+          saveGameState(saveState);
+          updateEconomyHUD();
+          showToast('✅ Paid Chandigarh Traffic e-Challan! Wanted Level cleared.', 'success');
+        } else {
+          showToast('Not enough cash to pay Challan! Police escalating to pursuit!', 'warn');
+          trafficPolice.setWantedLevelDirect(2);
+        }
+      }
+    } else if (e.code === 'KeyM') {
+      const mEl = document.getElementById('modal-map');
+      if (mEl && !mEl.classList.contains('hidden')) closeAllModals();
+      else openModal('modal-map');
+    } else if (e.code === 'Tab') {
+      e.preventDefault();
+      const mEl = document.getElementById('modal-missions');
+      if (mEl && !mEl.classList.contains('hidden')) closeAllModals();
+      else openModal('modal-missions');
+    } else if (e.code === 'KeyG') {
+      const gEl = document.getElementById('modal-garage');
+      if (gEl && !gEl.classList.contains('hidden')) closeAllModals();
+      else openModal('modal-garage');
+    } else if (e.code === 'Backquote') {
+      e.preventDefault();
+      const cEl = document.getElementById('modal-cheats');
+      if (cEl && !cEl.classList.contains('hidden')) closeAllModals();
+      else {
+        openModal('modal-cheats');
+        setTimeout(() => {
+          const inp = document.getElementById('cheat-input');
+          if (inp) inp.focus();
+        }, 50);
+      }
+    } else if (e.code === 'Escape') {
+      closeAllModals();
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+  });
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Wire UI Buttons
+  const bindBtn = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', fn);
+  };
+
+  bindBtn('btn-start-play', () => {
+    sound.init();
+    document.getElementById('main-menu-overlay').classList.add('hidden');
+    gameStarted = true;
+    gamePaused = false;
+    updateEconomyHUD();
+    updateMissionHUD();
+  });
+
+  bindBtn('btn-menu-missions', () => {
+    document.getElementById('main-menu-overlay').classList.add('hidden');
+    gameStarted = true;
+    openModal('modal-missions');
+  });
+
+  bindBtn('btn-menu-garage', () => {
+    document.getElementById('main-menu-overlay').classList.add('hidden');
+    gameStarted = true;
+    openModal('modal-garage');
+  });
+
+  bindBtn('btn-menu-newgame', () => {
+    Object.assign(saveState, JSON.parse(JSON.stringify(DEFAULT_SAVE_STATE)));
+    saveGameState(saveState);
+    document.getElementById('main-menu-overlay').classList.add('hidden');
+    gameStarted = true;
+    gamePaused = false;
+    updateEconomyHUD();
+    updateMissionHUD();
+    showToast('🆕 Started Fresh Career in Chandigarh!', 'success');
+  });
+
+  bindBtn('btn-hud-missions', () => openModal('modal-missions'));
+  bindBtn('btn-hud-garage', () => openModal('modal-garage'));
+  bindBtn('btn-hud-map', () => openModal('modal-map'));
+  bindBtn('btn-hud-cheats', () => openModal('modal-cheats'));
+  bindBtn('btn-hud-settings', () => openModal('modal-settings'));
+  bindBtn('btn-hud-engine-guide', () => openModal('modal-engine-guide'));
+
+  bindBtn('btn-hud-taxi', () => {
+    if (activeMission) {
+      showToast('Finish or abort your current mission first!', 'warn');
+      return;
+    }
+    const targetLm = LANDMARKS[Math.floor(Math.random() * LANDMARKS.length)];
+    taxiFareActive = {
+      label: `Drop Passenger at ${targetLm.name}`,
+      x: targetLm.x,
+      z: targetLm.z,
+      reward: 1400 + Math.floor(Math.random() * 900)
+    };
+    sound.playChime('start');
+    showToast(`🚕 Instant Taxi Dispatch: ${taxiFareActive.label}`, 'info');
+    updateMissionHUD();
+  });
+
+  bindBtn('btn-hud-weather', () => {
+    const cycle = ['sunny', 'sunset', 'night', 'rain', 'fog'];
+    const idx = (cycle.indexOf(envState.weather) + 1) % cycle.length;
+    envState.weather = cycle[idx];
+    if (envState.weather === 'night') envState.timeHours = 23.0;
+    else if (envState.weather === 'sunset') envState.timeHours = 18.0;
+    else envState.timeHours = 11.0;
+    showToast(`🌤️ Environment switched to: ${envState.weather.toUpperCase()}`, 'info');
+  });
+
+  bindBtn('btn-hud-mute', () => {
+    const isMuted = sound.toggleMute();
+    const btn = document.getElementById('btn-hud-mute');
+    if (btn) btn.textContent = isMuted ? '🔇 Audio Off' : '🔊 Audio On';
+  });
+
+  document.querySelectorAll('[data-close-modal]').forEach((btn) => {
+    btn.addEventListener('click', closeAllModals);
+  });
+
+  // Cheat Console Submit & Quick Pills
+  bindBtn('btn-cheat-submit', () => {
+    const inp = document.getElementById('cheat-input');
+    if (inp) {
+      executeCheatCode(inp.value);
+      inp.value = '';
+    }
+  });
+
+  const cheatInp = document.getElementById('cheat-input');
+  if (cheatInp) {
+    cheatInp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        executeCheatCode(cheatInp.value);
+        cheatInp.value = '';
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-quick-cheat]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      executeCheatCode(btn.getAttribute('data-quick-cheat'));
+    });
+  });
+
+  // Full Map Click to Set GPS Waypoint
+  if (fullmapCanvas) {
+    fullmapCanvas.addEventListener('click', (e) => {
+      const rect = fullmapCanvas.getBoundingClientRect();
+      const rx = (e.clientX - rect.left) / rect.width;
+      const rz = (e.clientY - rect.top) / rect.height;
+      const wx = rx * WORLD_CONFIG.SIZE - WORLD_CONFIG.HALF_SIZE;
+      const wz = rz * WORLD_CONFIG.SIZE - WORLD_CONFIG.HALF_SIZE;
+      playerState.waypoint = { x: wx, z: wz };
+      drawFullMap();
+      showToast(`📍 GPS Waypoint set at (${Math.round(wx)}, ${Math.round(wz)})`, 'info');
+    });
+  }
+
+  // Mobile / On-Screen Touch Controls Wiring
+  document.querySelectorAll('[data-touch-key]').forEach((btn) => {
+    const code = btn.getAttribute('data-touch-key');
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sound.init();
+      keys[code] = true;
+    });
+    btn.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      keys[code] = false;
+    });
+    btn.addEventListener('pointerleave', () => {
+      keys[code] = false;
+    });
+  });
+
+  updateEconomyHUD();
+  updateMissionHUD();
+
+  // Main Animation Loop
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const rawDt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    const dt = playerState.slowMo ? rawDt * 0.45 : rawDt;
+
+    if (gameStarted && !gamePaused) {
+      updatePhysics(dt);
+      trafficPolice.update(dt, playerState, showToast, (vType) => {
+        if (activeMission && vType === 'redLight' && activeMission.rules?.noRedLight) {
+          failMission('Crossed a red traffic light during a strict discipline mission!');
+        }
+      });
+      updateMissionLogic(dt);
+      applyEnvironmentVisuals(dt);
+      sound.updateContinuous(
+        playerState.inVehicle,
+        playerState.speed,
+        playerState.currentVehicle ? playerState.currentVehicle.spec.maxSpeed : 45,
+        trafficPolice.wantedLevel,
+        envState.weather === 'rain',
+        dt
+      );
+      drawMinimap();
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('DOMContentLoaded', () => { bootGTAChandigarh(); });
+
+  </script>
+</body>
+</html>
